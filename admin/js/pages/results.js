@@ -33,27 +33,27 @@ window.ResultsPage = (function() {
                 <!-- Header -->
                 <div class="section-header mb-4">
                     <div>
-                        <h2 class="section-title">🎯 Resultados dos Concursos</h2>
-                        <p class="section-subtitle">Resultados oficiais da Quina (somente leitura)</p>
+                        <h2 class="section-title">🎯 Contest Results</h2>
+                        <p class="section-subtitle">Official Quina results (read-only)</p>
                     </div>
                 </div>
 
                 <!-- Stats -->
                 <div class="stats-grid mb-4">
                     <div class="stat-card primary">
-                        <span class="stat-label">Total de Resultados</span>
+                        <span class="stat-label">Total Results</span>
                         <span class="stat-value" id="statTotalResults">--</span>
                     </div>
                     <div class="stat-card success">
-                        <span class="stat-label">Sorteios Válidos</span>
+                        <span class="stat-label">Valid Draws</span>
                         <span class="stat-value" id="statValidDraws">--</span>
                     </div>
                     <div class="stat-card warning">
-                        <span class="stat-label">Sem Sorteio</span>
+                        <span class="stat-label">No Draw</span>
                         <span class="stat-value" id="statNoDraws">--</span>
                     </div>
                     <div class="stat-card info">
-                        <span class="stat-label">Último Resultado</span>
+                        <span class="stat-label">Latest Result</span>
                         <span class="stat-value" id="statLatestContest">--</span>
                     </div>
                 </div>
@@ -62,7 +62,7 @@ window.ResultsPage = (function() {
                 <div class="card mb-4" id="latestResultCard" style="display: none;">
                     <div class="card-header">
                         <div>
-                            <h3 class="card-title">🎱 Último Resultado</h3>
+                            <h3 class="card-title">🎱 Latest Result</h3>
                             <span class="text-muted" id="latestResultDate">--</span>
                         </div>
                         <span class="badge badge-success" id="latestResultContest">--</span>
@@ -77,8 +77,8 @@ window.ResultsPage = (function() {
                 <!-- Search -->
                 <div class="filters-row">
                     <div class="filter-group" style="flex: 1;">
-                        <label>Buscar Concurso</label>
-                        <input type="text" id="searchResults" placeholder="Digite o número do concurso...">
+                        <label>Search Contest</label>
+                        <input type="text" id="searchResults" placeholder="Enter contest number...">
                     </div>
                 </div>
 
@@ -88,15 +88,15 @@ window.ResultsPage = (function() {
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>Concurso</th>
-                                    <th>Data do Sorteio</th>
-                                    <th>Números Sorteados</th>
-                                    <th>Salvo Em</th>
-                                    <th>Fonte</th>
+                                    <th>Contest</th>
+                                    <th>Draw Date</th>
+                                    <th>Winning Numbers</th>
+                                    <th>Saved At</th>
+                                    <th>Source</th>
                                 </tr>
                             </thead>
                             <tbody id="resultsTableBody">
-                                <tr><td colspan="5" class="text-center text-muted">Carregando resultados...</td></tr>
+                                <tr><td colspan="5" class="text-center text-muted">Loading results...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -104,8 +104,8 @@ window.ResultsPage = (function() {
 
                 <!-- Info -->
                 <div class="mt-4 text-center text-muted" style="font-size: 0.85rem;">
-                    <p>📢 Os resultados são obtidos do sorteio oficial da Quina.</p>
-                    <p>Fonte: <a href="https://loterias.caixa.gov.br" target="_blank">loterias.caixa.gov.br</a></p>
+                    <p>📢 Results are obtained from the official Quina lottery.</p>
+                    <p>Source: <a href="https://loterias.caixa.gov.br" target="_blank">loterias.caixa.gov.br</a></p>
                 </div>
             </div>
         `;
@@ -142,7 +142,7 @@ window.ResultsPage = (function() {
         
         card.style.display = 'block';
         
-        document.getElementById('latestResultContest').textContent = `Concurso #${latest.contest}`;
+        document.getElementById('latestResultContest').textContent = `Contest #${latest.contest}`;
         document.getElementById('latestResultDate').textContent = latest.drawDate;
         
         const numbersContainer = document.getElementById('latestResultNumbers');
@@ -157,7 +157,7 @@ window.ResultsPage = (function() {
         if (!tbody) return;
         
         if (filteredResults.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum resultado encontrado</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No results found</td></tr>';
             return;
         }
         
@@ -165,7 +165,7 @@ window.ResultsPage = (function() {
             // Numbers
             let numbersHtml = '';
             if (result.isNoDraw) {
-                numbersHtml = '<span class="badge badge-warning">Sem Sorteio</span>';
+                numbersHtml = '<span class="badge badge-warning">No Draw</span>';
             } else {
                 numbersHtml = result.numbers.map(n => {
                     const colorClass = AdminCore.getBallColorClass(n);
@@ -230,11 +230,11 @@ window.ResultsPage = (function() {
             
         } catch (error) {
             console.error('Error loading results:', error);
-            AdminCore.showToast('Erro ao carregar resultados', 'error');
+            AdminCore.showToast('Error loading results', 'error');
             
             const tbody = document.getElementById('resultsTableBody');
             if (tbody) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Erro ao carregar dados</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading data</td></tr>';
             }
         }
     }
@@ -302,4 +302,3 @@ window.ResultsPage = (function() {
         loadData
     };
 })();
-

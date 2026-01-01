@@ -45,11 +45,11 @@ window.WinnerCalculator = (function() {
      * Prize tier names
      */
     const PRIZE_TIERS = {
-        5: { name: 'Quina', emoji: '🏆', label: '5 acertos' },
-        4: { name: '2º Prêmio', emoji: '🥈', label: '4 acertos' },
-        3: { name: '3º Prêmio', emoji: '🥉', label: '3 acertos' },
-        2: { name: 'Consolação', emoji: '🎯', label: '2 acertos' },
-        1: { name: 'Participação', emoji: '✨', label: '1 acerto' }
+        5: { name: 'Jackpot', emoji: '🏆', label: '5 matches' },
+        4: { name: '2nd Prize', emoji: '🥈', label: '4 matches' },
+        3: { name: '3rd Prize', emoji: '🥉', label: '3 matches' },
+        2: { name: 'Consolation', emoji: '🎯', label: '2 matches' },
+        1: { name: 'Participation', emoji: '✨', label: '1 match' }
     };
 
     // ============================================

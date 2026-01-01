@@ -2,7 +2,7 @@
  * POP-SORTE Admin Dashboard - Winners Page Module
  * 
  * This module renders the winners page with:
- * - Summary stat cards (5/4/3/2/1 acertos)
+ * - Summary stat cards (5/4/3/2/1 matches)
  * - Ticket creators comparison chart (Today vs Yesterday)
  * - Filters: Contest, Draw Date, Prize Level, WhatsApp
  * - Winners table with color-coded matched numbers
@@ -45,35 +45,35 @@ window.WinnersPage = (function() {
                 <!-- Header -->
                 <div class="section-header mb-4">
                     <div>
-                        <h2 class="section-title">🏆 Ganhadores</h2>
-                        <p class="section-subtitle">Análise de ganhadores e estatísticas de prêmios</p>
+                        <h2 class="section-title">🏆 Winners</h2>
+                        <p class="section-subtitle">Winner analysis and prize statistics</p>
                     </div>
                 </div>
 
                 <!-- Summary Stats -->
                 <div class="stats-grid mb-4" id="winnersSummaryStats">
                     <div class="stat-card" style="border-left-color: #fbbf24;">
-                        <span class="stat-label">🏆 5 acertos</span>
+                        <span class="stat-label">🏆 5 matches</span>
                         <span class="stat-value" id="stat5Matches">--</span>
                     </div>
                     <div class="stat-card" style="border-left-color: #9ca3af;">
-                        <span class="stat-label">🥈 4 acertos</span>
+                        <span class="stat-label">🥈 4 matches</span>
                         <span class="stat-value" id="stat4Matches">--</span>
                     </div>
                     <div class="stat-card" style="border-left-color: #d97706;">
-                        <span class="stat-label">🥉 3 acertos</span>
+                        <span class="stat-label">🥉 3 matches</span>
                         <span class="stat-value" id="stat3Matches">--</span>
                     </div>
                     <div class="stat-card info">
-                        <span class="stat-label">🎯 2 acertos</span>
+                        <span class="stat-label">🎯 2 matches</span>
                         <span class="stat-value" id="stat2Matches">--</span>
                     </div>
                     <div class="stat-card">
-                        <span class="stat-label">✨ 1 acerto</span>
+                        <span class="stat-label">✨ 1 match</span>
                         <span class="stat-value" id="stat1Match">--</span>
                     </div>
                     <div class="stat-card success">
-                        <span class="stat-label">Total Premiados</span>
+                        <span class="stat-label">Total Winners</span>
                         <span class="stat-value" id="statTotalWinners">--</span>
                     </div>
                 </div>
@@ -83,8 +83,8 @@ window.WinnersPage = (function() {
                     <!-- Ticket Creators Comparison -->
                     <div class="card">
                         <div class="card-header">
-                            <h3 class="card-title">Criadores de Bilhete</h3>
-                            <span class="text-muted">Hoje vs Ontem</span>
+                            <h3 class="card-title">Ticket Creators</h3>
+                            <span class="text-muted">Today vs Yesterday</span>
                         </div>
                         <div class="card-body">
                             <div class="chart-container" style="height: 200px;">
@@ -96,8 +96,8 @@ window.WinnersPage = (function() {
                     <!-- Winners by Tier -->
                     <div class="card">
                         <div class="card-header">
-                            <h3 class="card-title">Distribuição por Acertos</h3>
-                            <span class="text-muted">Todos os concursos</span>
+                            <h3 class="card-title">Distribution by Matches</h3>
+                            <span class="text-muted">All contests</span>
                         </div>
                         <div class="card-body">
                             <div class="chart-container" style="height: 200px;">
@@ -110,62 +110,62 @@ window.WinnersPage = (function() {
                 <!-- Filters -->
                 <div class="filters-row">
                     <div class="filter-group">
-                        <label>Concurso</label>
+                        <label>Contest</label>
                         <select id="filterWinnersContest">
-                            <option value="">Todos</option>
+                            <option value="">All</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label>Data Sorteio</label>
+                        <label>Draw Date</label>
                         <select id="filterWinnersDrawDate">
-                            <option value="">Todas</option>
+                            <option value="">All</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label>Nível de Prêmio</label>
+                        <label>Prize Level</label>
                         <select id="filterWinnersPrizeLevel">
-                            <option value="all">Todos</option>
-                            <option value="5">🏆 5 acertos</option>
-                            <option value="4">🥈 4 acertos</option>
-                            <option value="3">🥉 3 acertos</option>
-                            <option value="2">🎯 2 acertos</option>
-                            <option value="1">✨ 1 acerto</option>
+                            <option value="all">All</option>
+                            <option value="5">🏆 5 matches</option>
+                            <option value="4">🥈 4 matches</option>
+                            <option value="3">🥉 3 matches</option>
+                            <option value="2">🎯 2 matches</option>
+                            <option value="1">✨ 1 match</option>
                         </select>
                     </div>
                     <div class="filter-group">
                         <label>WhatsApp</label>
-                        <input type="text" id="filterWinnersWhatsapp" placeholder="Buscar...">
+                        <input type="text" id="filterWinnersWhatsapp" placeholder="Search...">
                     </div>
                     <div class="filter-actions">
-                        <button id="btnClearWinnersFilters" class="btn btn-secondary btn-sm">Limpar</button>
-                        <button id="btnExportWinnersCSV" class="btn btn-primary btn-sm">📥 Exportar CSV</button>
+                        <button id="btnClearWinnersFilters" class="btn btn-secondary btn-sm">Clear</button>
+                        <button id="btnExportWinnersCSV" class="btn btn-primary btn-sm">📥 Export CSV</button>
                     </div>
                 </div>
 
                 <!-- Winners Table -->
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title">Lista de Ganhadores</h3>
-                        <span class="badge badge-info" id="winnersCount">0 ganhadores</span>
+                        <h3 class="card-title">Winners List</h3>
+                        <span class="badge badge-info" id="winnersCount">0 winners</span>
                     </div>
                     <div class="table-container">
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>Prêmio</th>
-                                    <th>Acertos</th>
-                                    <th>Data/Hora</th>
+                                    <th>Prize</th>
+                                    <th>Matches</th>
+                                    <th>Date/Time</th>
                                     <th>Game ID</th>
                                     <th>WhatsApp</th>
-                                    <th>Números Escolhidos</th>
-                                    <th>Números Sorteados</th>
-                                    <th>Acertados</th>
-                                    <th>Sorteio</th>
-                                    <th>Concurso</th>
+                                    <th>Chosen Numbers</th>
+                                    <th>Winning Numbers</th>
+                                    <th>Matched</th>
+                                    <th>Draw</th>
+                                    <th>Contest</th>
                                 </tr>
                             </thead>
                             <tbody id="winnersTableBody">
-                                <tr><td colspan="10" class="text-center text-muted">Carregando ganhadores...</td></tr>
+                                <tr><td colspan="10" class="text-center text-muted">Loading winners...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -226,7 +226,7 @@ window.WinnersPage = (function() {
         
         const contestSelect = document.getElementById('filterWinnersContest');
         if (contestSelect) {
-            contestSelect.innerHTML = '<option value="">Todos</option>' +
+            contestSelect.innerHTML = '<option value="">All</option>' +
                 contests.map(c => `<option value="${c}">${c}</option>`).join('');
         }
         
@@ -235,7 +235,7 @@ window.WinnersPage = (function() {
         
         const drawDateSelect = document.getElementById('filterWinnersDrawDate');
         if (drawDateSelect) {
-            drawDateSelect.innerHTML = '<option value="">Todas</option>' +
+            drawDateSelect.innerHTML = '<option value="">All</option>' +
                 drawDates.map(d => `<option value="${d}">${d}</option>`).join('');
         }
     }
@@ -247,11 +247,11 @@ window.WinnersPage = (function() {
         // Update count badge
         const countBadge = document.getElementById('winnersCount');
         if (countBadge) {
-            countBadge.textContent = `${filteredWinners.length} ganhador${filteredWinners.length !== 1 ? 'es' : ''}`;
+            countBadge.textContent = `${filteredWinners.length} winner${filteredWinners.length !== 1 ? 's' : ''}`;
         }
         
         if (filteredWinners.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">Nenhum ganhador encontrado</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No winners found</td></tr>';
             return;
         }
         
@@ -271,15 +271,15 @@ window.WinnersPage = (function() {
             const tierInfo = WinnerCalculator.PRIZE_TIERS[winner.matches];
             let prizeBadge = '';
             if (winner.matches === 5) {
-                prizeBadge = '<span class="badge" style="background: #fef3c7; color: #92400e;">🏆 Quina</span>';
+                prizeBadge = '<span class="badge" style="background: #fef3c7; color: #92400e;">🏆 Jackpot</span>';
             } else if (winner.matches === 4) {
-                prizeBadge = '<span class="badge" style="background: #f3f4f6; color: #4b5563;">🥈 2º</span>';
+                prizeBadge = '<span class="badge" style="background: #f3f4f6; color: #4b5563;">🥈 2nd</span>';
             } else if (winner.matches === 3) {
-                prizeBadge = '<span class="badge" style="background: #fef3c7; color: #b45309;">🥉 3º</span>';
+                prizeBadge = '<span class="badge" style="background: #fef3c7; color: #b45309;">🥉 3rd</span>';
             } else if (winner.matches === 2) {
-                prizeBadge = '<span class="badge badge-info">🎯 Consolação</span>';
+                prizeBadge = '<span class="badge badge-info">🎯 Consolation</span>';
             } else {
-                prizeBadge = '<span class="badge badge-gray">✨ Participação</span>';
+                prizeBadge = '<span class="badge badge-gray">✨ Participation</span>';
             }
             
             // Chosen numbers with match highlighting
@@ -387,21 +387,21 @@ window.WinnersPage = (function() {
     
     function exportCSV() {
         if (filteredWinners.length === 0) {
-            AdminCore.showToast('Nenhum dado para exportar', 'warning');
+            AdminCore.showToast('No data to export', 'warning');
             return;
         }
         
         const headers = [
-            'Acertos',
-            'Prêmio',
-            'Data/Hora',
+            'Matches',
+            'Prize',
+            'Date/Time',
             'Game ID',
             'WhatsApp',
-            'Números Escolhidos',
-            'Números Acertados',
-            'Data Sorteio',
-            'Concurso',
-            'Bilhete #'
+            'Chosen Numbers',
+            'Matched Numbers',
+            'Draw Date',
+            'Contest',
+            'Ticket #'
         ];
         
         const rows = filteredWinners.map(winner => {
@@ -425,10 +425,10 @@ window.WinnersPage = (function() {
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `ganhadores_${AdminCore.getBrazilDateString(new Date())}.csv`;
+        link.download = `winners_${AdminCore.getBrazilDateString(new Date())}.csv`;
         link.click();
         
-        AdminCore.showToast(`${filteredWinners.length} ganhadores exportados`, 'success');
+        AdminCore.showToast(`${filteredWinners.length} winners exported`, 'success');
     }
 
     // ============================================
@@ -456,7 +456,7 @@ window.WinnersPage = (function() {
             
         } catch (error) {
             console.error('Error loading winners data:', error);
-            AdminCore.showToast('Erro ao carregar ganhadores', 'error');
+            AdminCore.showToast('Error loading winners', 'error');
         }
     }
 
@@ -546,4 +546,3 @@ window.WinnersPage = (function() {
         exportCSV
     };
 })();
-

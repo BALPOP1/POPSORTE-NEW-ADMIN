@@ -1,45 +1,65 @@
 /**
- * POP-SORTE Admin Dashboard - Professional Light Theme
+ * POP-SORTE Admin Dashboard - Premium Dark Theme
  * 
- * Clean, accessible admin interface with:
- * - Light mode design with gray/white backgrounds
- * - Blue accent color for primary actions
+ * Premium admin interface with:
+ * - Dark mode design with rich blacks and contrast
+ * - Blue/cyan accent colors for primary actions
  * - Responsive sidebar navigation
  * - Clear typography hierarchy
+ * - Vibrant lottery number badges
  */
 
 /* ============================================
    CSS Variables / Design Tokens
    ============================================ */
 :root {
-    /* Primary Colors */
-    --primary: #2563eb;
-    --primary-hover: #1d4ed8;
-    --primary-light: #dbeafe;
-    --primary-dark: #1e40af;
+    /* Primary Colors - Cyan/Blue accent */
+    --primary: #06b6d4;
+    --primary-hover: #22d3ee;
+    --primary-light: rgba(6, 182, 212, 0.15);
+    --primary-dark: #0891b2;
     
     /* Semantic Colors */
     --success: #10b981;
-    --success-light: #d1fae5;
+    --success-light: rgba(16, 185, 129, 0.15);
     --warning: #f59e0b;
-    --warning-light: #fef3c7;
+    --warning-light: rgba(245, 158, 11, 0.15);
     --danger: #ef4444;
-    --danger-light: #fee2e2;
+    --danger-light: rgba(239, 68, 68, 0.15);
     --info: #3b82f6;
-    --info-light: #dbeafe;
+    --info-light: rgba(59, 130, 246, 0.15);
     
-    /* Neutral Colors */
-    --white: #ffffff;
-    --gray-50: #f9fafb;
-    --gray-100: #f3f4f6;
-    --gray-200: #e5e7eb;
-    --gray-300: #d1d5db;
-    --gray-400: #9ca3af;
-    --gray-500: #6b7280;
-    --gray-600: #4b5563;
-    --gray-700: #374151;
-    --gray-800: #1f2937;
-    --gray-900: #111827;
+    /* Dark Theme Colors */
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a24;
+    --bg-card: #16161f;
+    --bg-elevated: #1e1e2a;
+    --bg-hover: #252530;
+    
+    /* Border Colors */
+    --border-primary: #2a2a38;
+    --border-secondary: #3a3a4a;
+    --border-accent: rgba(6, 182, 212, 0.3);
+    
+    /* Text Colors */
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --text-accent: #06b6d4;
+    
+    /* Legacy neutral mappings for compatibility */
+    --white: #f1f5f9;
+    --gray-50: #1e1e2a;
+    --gray-100: #16161f;
+    --gray-200: #2a2a38;
+    --gray-300: #3a3a4a;
+    --gray-400: #64748b;
+    --gray-500: #94a3b8;
+    --gray-600: #cbd5e1;
+    --gray-700: #e2e8f0;
+    --gray-800: #f1f5f9;
+    --gray-900: #ffffff;
     
     /* Layout */
     --sidebar-width: 260px;
@@ -50,10 +70,11 @@
     --border-radius-sm: 4px;
     
     /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow: 0 2px 8px 0 rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px -1px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 10px 25px -3px rgb(0 0 0 / 0.6);
+    --shadow-glow: 0 0 20px rgba(6, 182, 212, 0.15);
     
     /* Transitions */
     --transition-fast: 150ms ease;
@@ -62,7 +83,8 @@
     
     /* Typography */
     --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --font-size-xs: 0.75rem;
+    --font-si////////\
+    \\E'e-xs: 0.75rem;
     --font-size-sm: 0.875rem;
     --font-size-base: 1rem;
     --font-size-lg: 1.125rem;
@@ -88,8 +110,8 @@ body {
     font-family: var(--font-family);
     font-size: var(--font-size-base);
     line-height: 1.5;
-    color: var(--gray-800);
-    background: var(--gray-100);
+    color: var(--text-primary);
+    background: var(--bg-primary);
     min-height: 100vh;
 }
 
@@ -99,6 +121,7 @@ a {
 }
 
 a:hover {
+    color: var(--primary-hover);
     text-decoration: underline;
 }
 
@@ -115,8 +138,8 @@ a:hover {
    ============================================ */
 .sidebar {
     width: var(--sidebar-width);
-    background: var(--white);
-    border-right: 1px solid var(--gray-200);
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-primary);
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -132,7 +155,8 @@ a:hover {
     display: flex;
     align-items: center;
     gap: 12px;
-    border-bottom: 1px solid var(--gray-200);
+    border-bottom: 1px solid var(--border-primary);
+    background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
 }
 
 .sidebar-logo {
@@ -144,16 +168,18 @@ a:hover {
 .sidebar-header h2 {
     font-size: var(--font-size-lg);
     font-weight: 700;
-    color: var(--gray-900);
+    color: var(--text-primary);
 }
 
 .admin-badge {
-    background: var(--primary);
-    color: var(--white);
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: var(--bg-primary);
     padding: 2px 8px;
     border-radius: 999px;
     font-size: var(--font-size-xs);
-    font-weight: 600;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .sidebar-nav {
@@ -170,21 +196,25 @@ a:hover {
     gap: 12px;
     padding: 12px 16px;
     border-radius: var(--border-radius);
-    color: var(--gray-600);
+    color: var(--text-secondary);
     font-weight: 500;
     transition: all var(--transition);
     text-decoration: none;
+    border: 1px solid transparent;
 }
 
 .nav-link:hover {
-    background: var(--gray-100);
-    color: var(--gray-900);
+    background: var(--bg-hover);
+    color: var(--text-primary);
     text-decoration: none;
+    border-color: var(--border-secondary);
 }
 
 .nav-link.active {
     background: var(--primary-light);
     color: var(--primary);
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-glow);
 }
 
 .nav-icon {
@@ -195,10 +225,11 @@ a:hover {
 
 .sidebar-footer {
     padding: 16px;
-    border-top: 1px solid var(--gray-200);
+    border-top: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     justify-content: space-between;
+    background: var(--bg-tertiary);
 }
 
 .user-info {
@@ -213,7 +244,7 @@ a:hover {
 
 .user-name {
     font-weight: 500;
-    color: var(--gray-700);
+    color: var(--text-secondary);
     font-size: var(--font-size-sm);
 }
 
@@ -226,6 +257,7 @@ a:hover {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    background: var(--bg-primary);
 }
 
 /* ============================================
@@ -233,8 +265,8 @@ a:hover {
    ============================================ */
 .topbar {
     height: var(--topbar-height);
-    background: var(--white);
-    border-bottom: 1px solid var(--gray-200);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -260,7 +292,7 @@ a:hover {
     display: block;
     width: 24px;
     height: 2px;
-    background: var(--gray-600);
+    background: var(--text-secondary);
     border-radius: 2px;
     transition: all var(--transition);
 }
@@ -268,7 +300,7 @@ a:hover {
 .topbar-left h1 {
     font-size: var(--font-size-xl);
     font-weight: 600;
-    color: var(--gray-900);
+    color: var(--text-primary);
 }
 
 .topbar-right {
@@ -285,7 +317,7 @@ a:hover {
 
 #lastRefresh {
     font-size: var(--font-size-sm);
-    color: var(--gray-500);
+    color: var(--text-muted);
 }
 
 .connection-status {
@@ -296,16 +328,19 @@ a:hover {
     border-radius: 999px;
     font-size: var(--font-size-sm);
     font-weight: 500;
+    border: 1px solid;
 }
 
 .connection-status.online {
     background: var(--success-light);
     color: var(--success);
+    border-color: rgba(16, 185, 129, 0.3);
 }
 
 .connection-status.offline {
     background: var(--danger-light);
     color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.3);
 }
 
 .status-dot {
@@ -313,6 +348,12 @@ a:hover {
     height: 8px;
     border-radius: 50%;
     background: currentColor;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
 /* ============================================
@@ -344,7 +385,7 @@ a:hover {
     align-items: center;
     justify-content: center;
     min-height: 400px;
-    color: var(--gray-500);
+    color: var(--text-muted);
 }
 
 /* ============================================
@@ -375,46 +416,49 @@ a:hover {
 }
 
 .btn-primary {
-    background: var(--primary);
-    color: var(--white);
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: var(--bg-primary);
     border-color: var(--primary);
+    font-weight: 600;
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: var(--primary-hover);
-    border-color: var(--primary-hover);
+    background: linear-gradient(135deg, var(--primary-hover), var(--primary));
+    box-shadow: var(--shadow-glow);
 }
 
 .btn-secondary {
-    background: var(--gray-100);
-    color: var(--gray-700);
-    border-color: var(--gray-300);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-color: var(--border-secondary);
 }
 
 .btn-secondary:hover:not(:disabled) {
-    background: var(--gray-200);
+    background: var(--bg-hover);
+    color: var(--text-primary);
 }
 
 .btn-outline {
     background: transparent;
-    color: var(--gray-600);
-    border-color: var(--gray-300);
+    color: var(--text-secondary);
+    border-color: var(--border-secondary);
 }
 
 .btn-outline:hover:not(:disabled) {
-    background: var(--gray-100);
-    color: var(--gray-800);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--primary);
 }
 
 .btn-success {
-    background: var(--success);
-    color: var(--white);
+    background: linear-gradient(135deg, var(--success), #059669);
+    color: white;
     border-color: var(--success);
 }
 
 .btn-danger {
-    background: var(--danger);
-    color: var(--white);
+    background: linear-gradient(135deg, var(--danger), #dc2626);
+    color: white;
     border-color: var(--danger);
 }
 
@@ -434,39 +478,44 @@ a:hover {
 
 .btn-icon {
     padding: 8px;
-    background: none;
-    border: none;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
     cursor: pointer;
     border-radius: var(--border-radius);
-    transition: background var(--transition);
+    transition: all var(--transition);
+    color: var(--text-secondary);
 }
 
 .btn-icon:hover {
-    background: var(--gray-100);
+    background: var(--bg-hover);
+    border-color: var(--primary);
+    color: var(--primary);
 }
 
 /* ============================================
    Cards
    ============================================ */
 .card {
-    background: var(--white);
+    background: var(--bg-card);
     border-radius: var(--border-radius-lg);
-    border: 1px solid var(--gray-200);
-    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-primary);
+    box-shadow: var(--shadow);
 }
 
 .card-header {
     padding: 16px 20px;
-    border-bottom: 1px solid var(--gray-200);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     justify-content: space-between;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
 }
 
 .card-title {
     font-size: var(--font-size-lg);
     font-weight: 600;
-    color: var(--gray-900);
+    color: var(--text-primary);
 }
 
 .card-body {
@@ -475,8 +524,8 @@ a:hover {
 
 .card-footer {
     padding: 16px 20px;
-    border-top: 1px solid var(--gray-200);
-    background: var(--gray-50);
+    border-top: 1px solid var(--border-primary);
+    background: var(--bg-tertiary);
     border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
 }
 
@@ -491,45 +540,57 @@ a:hover {
 }
 
 .stat-card {
-    background: var(--white);
+    background: var(--bg-card);
     border-radius: var(--border-radius-lg);
-    border: 1px solid var(--gray-200);
+    border: 1px solid var(--border-primary);
     padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 8px;
+    position: relative;
+    overflow: hidden;
 }
 
-.stat-card.primary {
-    border-left: 4px solid var(--primary);
+.stat-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--border-secondary);
 }
 
-.stat-card.success {
-    border-left: 4px solid var(--success);
+.stat-card.primary::before {
+    background: linear-gradient(180deg, var(--primary), var(--primary-dark));
 }
 
-.stat-card.warning {
-    border-left: 4px solid var(--warning);
+.stat-card.success::before {
+    background: linear-gradient(180deg, var(--success), #059669);
 }
 
-.stat-card.danger {
-    border-left: 4px solid var(--danger);
+.stat-card.warning::before {
+    background: linear-gradient(180deg, var(--warning), #d97706);
 }
 
-.stat-card.info {
-    border-left: 4px solid var(--info);
+.stat-card.danger::before {
+    background: linear-gradient(180deg, var(--danger), #dc2626);
+}
+
+.stat-card.info::before {
+    background: linear-gradient(180deg, var(--info), #2563eb);
 }
 
 .stat-label {
     font-size: var(--font-size-sm);
-    color: var(--gray-500);
+    color: var(--text-muted);
     font-weight: 500;
 }
 
 .stat-value {
     font-size: var(--font-size-2xl);
     font-weight: 700;
-    color: var(--gray-900);
+    color: var(--text-primary);
 }
 
 .stat-change {
@@ -552,8 +613,9 @@ a:hover {
    ============================================ */
 .table-container {
     overflow-x: auto;
-    border: 1px solid var(--gray-200);
+    border: 1px solid var(--border-primary);
     border-radius: var(--border-radius-lg);
+    background: var(--bg-card);
 }
 
 .table {
@@ -566,22 +628,29 @@ a:hover {
 .table td {
     padding: 12px 16px;
     text-align: left;
-    border-bottom: 1px solid var(--gray-200);
+    border-bottom: 1px solid var(--border-primary);
 }
 
 .table th {
-    background: var(--gray-50);
+    background: var(--bg-tertiary);
     font-weight: 600;
-    color: var(--gray-700);
+    color: var(--text-secondary);
     white-space: nowrap;
+    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.5px;
 }
 
 .table tr:last-child td {
     border-bottom: none;
 }
 
+.table tbody tr {
+    transition: background var(--transition);
+}
+
 .table tbody tr:hover {
-    background: var(--gray-50);
+    background: var(--bg-hover);
 }
 
 .table-actions {
@@ -600,31 +669,37 @@ a:hover {
     border-radius: 999px;
     font-size: var(--font-size-xs);
     font-weight: 600;
+    border: 1px solid transparent;
 }
 
 .badge-success {
     background: var(--success-light);
     color: var(--success);
+    border-color: rgba(16, 185, 129, 0.3);
 }
 
 .badge-warning {
     background: var(--warning-light);
-    color: #b45309;
+    color: var(--warning);
+    border-color: rgba(245, 158, 11, 0.3);
 }
 
 .badge-danger {
     background: var(--danger-light);
     color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.3);
 }
 
 .badge-info {
     background: var(--info-light);
     color: var(--info);
+    border-color: rgba(59, 130, 246, 0.3);
 }
 
 .badge-gray {
-    background: var(--gray-200);
-    color: var(--gray-700);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-color: var(--border-secondary);
 }
 
 /* ============================================
@@ -639,7 +714,7 @@ a:hover {
     margin-bottom: 6px;
     font-size: var(--font-size-sm);
     font-weight: 500;
-    color: var(--gray-700);
+    color: var(--text-secondary);
 }
 
 .form-input,
@@ -647,9 +722,10 @@ a:hover {
     width: 100%;
     padding: 10px 14px;
     font-size: var(--font-size-sm);
-    border: 1px solid var(--gray-300);
+    border: 1px solid var(--border-secondary);
     border-radius: var(--border-radius);
-    background: var(--white);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
     transition: border-color var(--transition), box-shadow var(--transition);
 }
 
@@ -661,7 +737,7 @@ a:hover {
 }
 
 .form-input::placeholder {
-    color: var(--gray-400);
+    color: var(--text-muted);
 }
 
 .form-input.error {
@@ -671,7 +747,7 @@ a:hover {
 .form-hint {
     margin-top: 4px;
     font-size: var(--font-size-xs);
-    color: var(--gray-500);
+    color: var(--text-muted);
 }
 
 /* ============================================
@@ -683,9 +759,9 @@ a:hover {
     gap: 12px;
     margin-bottom: 20px;
     padding: 16px;
-    background: var(--white);
+    background: var(--bg-card);
     border-radius: var(--border-radius-lg);
-    border: 1px solid var(--gray-200);
+    border: 1px solid var(--border-primary);
 }
 
 .filter-group {
@@ -698,15 +774,25 @@ a:hover {
 .filter-group label {
     font-size: var(--font-size-xs);
     font-weight: 500;
-    color: var(--gray-600);
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .filter-group input,
 .filter-group select {
     padding: 8px 12px;
     font-size: var(--font-size-sm);
-    border: 1px solid var(--gray-300);
+    border: 1px solid var(--border-secondary);
     border-radius: var(--border-radius-sm);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.filter-group input:focus,
+.filter-group select:focus {
+    outline: none;
+    border-color: var(--primary);
 }
 
 .filter-actions {
@@ -723,12 +809,13 @@ a:hover {
     align-items: center;
     justify-content: space-between;
     padding: 16px;
-    border-top: 1px solid var(--gray-200);
+    border-top: 1px solid var(--border-primary);
+    background: var(--bg-tertiary);
 }
 
 .pagination-info {
     font-size: var(--font-size-sm);
-    color: var(--gray-600);
+    color: var(--text-muted);
 }
 
 .pagination-controls {
@@ -740,15 +827,18 @@ a:hover {
 .pagination-btn {
     padding: 8px 12px;
     font-size: var(--font-size-sm);
-    border: 1px solid var(--gray-300);
+    border: 1px solid var(--border-secondary);
     border-radius: var(--border-radius-sm);
-    background: var(--white);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all var(--transition);
 }
 
 .pagination-btn:hover:not(:disabled) {
-    background: var(--gray-100);
+    background: var(--bg-hover);
+    border-color: var(--primary);
+    color: var(--primary);
 }
 
 .pagination-btn:disabled {
@@ -758,7 +848,7 @@ a:hover {
 
 .pagination-btn.active {
     background: var(--primary);
-    color: var(--white);
+    color: var(--bg-primary);
     border-color: var(--primary);
 }
 
@@ -771,7 +861,9 @@ a:hover {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.8);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -780,9 +872,10 @@ a:hover {
 }
 
 .modal-content {
-    background: var(--white);
+    background: var(--bg-card);
     border-radius: var(--border-radius-lg);
     box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-primary);
     max-width: 500px;
     width: 100%;
     max-height: 90vh;
@@ -791,29 +884,33 @@ a:hover {
 
 .modal-header {
     padding: 20px;
-    border-bottom: 1px solid var(--gray-200);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     justify-content: space-between;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
 }
 
 .modal-header h2 {
     font-size: var(--font-size-lg);
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 .modal-close {
     background: none;
     border: none;
     font-size: 1.5rem;
-    color: var(--gray-500);
+    color: var(--text-muted);
     cursor: pointer;
     padding: 4px;
     line-height: 1;
+    transition: color var(--transition);
 }
 
 .modal-close:hover {
-    color: var(--gray-800);
+    color: var(--danger);
 }
 
 .modal-body {
@@ -822,15 +919,17 @@ a:hover {
 
 .modal-footer {
     padding: 16px 20px;
-    border-top: 1px solid var(--gray-200);
+    border-top: 1px solid var(--border-primary);
     display: flex;
     justify-content: flex-end;
     gap: 12px;
+    background: var(--bg-tertiary);
 }
 
 /* Login Modal */
 .login-modal {
     max-width: 400px;
+    background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-card) 100%);
 }
 
 .login-header {
@@ -842,17 +941,19 @@ a:hover {
     width: 64px;
     height: 64px;
     margin-bottom: 16px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-glow);
 }
 
 .login-header h1 {
     font-size: var(--font-size-xl);
     font-weight: 700;
-    color: var(--gray-900);
+    color: var(--text-primary);
     margin-bottom: 8px;
 }
 
 .login-header p {
-    color: var(--gray-500);
+    color: var(--text-muted);
     font-size: var(--font-size-sm);
 }
 
@@ -868,6 +969,7 @@ a:hover {
     font-size: var(--font-size-sm);
     margin-bottom: 16px;
     display: none;
+    border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .error-message.show {
@@ -889,22 +991,27 @@ a:hover {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-primary);
 }
 
 .ticket-info-item .label {
     font-size: var(--font-size-xs);
-    color: var(--gray-500);
+    color: var(--text-muted);
     font-weight: 500;
+    text-transform: uppercase;
 }
 
 .ticket-info-item .value {
     font-size: var(--font-size-sm);
-    color: var(--gray-900);
+    color: var(--text-primary);
     font-weight: 600;
 }
 
 /* ============================================
-   Number Badges (Lottery Numbers)
+   Number Badges (Lottery Numbers) - PREMIUM STYLE
    ============================================ */
 .numbers-display {
     display: flex;
@@ -921,25 +1028,65 @@ a:hover {
     justify-content: center;
     font-size: var(--font-size-xs);
     font-weight: 700;
-    color: var(--white);
-    background: var(--gray-500);
+    color: white;
+    background: var(--text-muted);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    position: relative;
+}
+
+.number-badge::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    right: 4px;
+    height: 40%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 100%);
+    border-radius: 50% 50% 0 0;
 }
 
 .number-badge.match {
-    box-shadow: 0 0 0 3px var(--success);
+    box-shadow: 0 0 0 3px var(--success), 0 2px 8px rgba(16, 185, 129, 0.5);
+    animation: matchPulse 1.5s ease-in-out infinite;
 }
 
-/* Ball colors based on number ranges */
-.ball-color-1 { background: #2563eb; }
-.ball-color-2 { background: #7c3aed; }
-.ball-color-3 { background: #db2777; }
-.ball-color-4 { background: #dc2626; }
-.ball-color-5 { background: #ea580c; }
-.ball-color-6 { background: #ca8a04; }
-.ball-color-7 { background: #65a30d; }
-.ball-color-8 { background: #059669; }
-.ball-color-9 { background: #0891b2; }
-.ball-color-0 { background: #4b5563; }
+@keyframes matchPulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--success), 0 2px 8px rgba(16, 185, 129, 0.5); }
+    50% { box-shadow: 0 0 0 4px var(--success), 0 2px 16px rgba(16, 185, 129, 0.7); }
+}
+
+/* Vibrant Ball Colors - Premium Gradient Style */
+.ball-color-1 { 
+    background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+}
+.ball-color-2 { 
+    background: linear-gradient(145deg, #8b5cf6, #6d28d9);
+}
+.ball-color-3 { 
+    background: linear-gradient(145deg, #ec4899, #be185d);
+}
+.ball-color-4 { 
+    background: linear-gradient(145deg, #ef4444, #b91c1c);
+}
+.ball-color-5 { 
+    background: linear-gradient(145deg, #f97316, #c2410c);
+}
+.ball-color-6 { 
+    background: linear-gradient(145deg, #eab308, #a16207);
+}
+.ball-color-7 { 
+    background: linear-gradient(145deg, #22c55e, #15803d);
+}
+.ball-color-8 { 
+    background: linear-gradient(145deg, #14b8a6, #0f766e);
+}
+.ball-color-9 { 
+    background: linear-gradient(145deg, #06b6d4, #0e7490);
+}
+.ball-color-0 { 
+    background: linear-gradient(145deg, #64748b, #475569);
+}
 
 /* ============================================
    Charts Section
@@ -960,7 +1107,7 @@ a:hover {
 .chart-title {
     font-size: var(--font-size-base);
     font-weight: 600;
-    color: var(--gray-900);
+    color: var(--text-primary);
 }
 
 .chart-legend {
@@ -973,7 +1120,7 @@ a:hover {
     align-items: center;
     gap: 6px;
     font-size: var(--font-size-sm);
-    color: var(--gray-600);
+    color: var(--text-secondary);
 }
 
 .legend-color {
@@ -989,8 +1136,8 @@ a:hover {
     position: fixed;
     bottom: 24px;
     right: 24px;
-    background: var(--gray-900);
-    color: var(--white);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
     padding: 14px 20px;
     border-radius: var(--border-radius);
     box-shadow: var(--shadow-lg);
@@ -1000,6 +1147,7 @@ a:hover {
     transform: translateY(100px);
     opacity: 0;
     transition: all var(--transition);
+    border: 1px solid var(--border-secondary);
 }
 
 .toast.show {
@@ -1009,14 +1157,20 @@ a:hover {
 
 .toast.success {
     background: var(--success);
+    border-color: var(--success);
+    color: white;
 }
 
 .toast.error {
     background: var(--danger);
+    border-color: var(--danger);
+    color: white;
 }
 
 .toast.warning {
     background: var(--warning);
+    border-color: var(--warning);
+    color: var(--bg-primary);
 }
 
 /* ============================================
@@ -1025,7 +1179,7 @@ a:hover {
 .spinner {
     width: 40px;
     height: 40px;
-    border: 3px solid var(--gray-200);
+    border: 3px solid var(--border-secondary);
     border-top-color: var(--primary);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
@@ -1047,7 +1201,7 @@ a:hover {
 .empty-state {
     text-align: center;
     padding: 48px 24px;
-    color: var(--gray-500);
+    color: var(--text-muted);
 }
 
 .empty-state-icon {
@@ -1058,7 +1212,7 @@ a:hover {
 .empty-state-title {
     font-size: var(--font-size-lg);
     font-weight: 600;
-    color: var(--gray-700);
+    color: var(--text-secondary);
     margin-bottom: 8px;
 }
 
@@ -1081,12 +1235,16 @@ a:hover {
 .section-title {
     font-size: var(--font-size-lg);
     font-weight: 600;
-    color: var(--gray-900);
+    color: var(--text-primary);
 }
 
 .section-subtitle {
     font-size: var(--font-size-sm);
-    color: var(--gray-500);
+    color: var(--text-muted);
+}
+
+.section {
+    margin-bottom: 32px;
 }
 
 /* ============================================
@@ -1120,26 +1278,31 @@ a:hover {
     display: flex;
     align-items: center;
     gap: 12px;
+    border: 1px solid;
 }
 
 .status-banner.success {
     background: var(--success-light);
-    color: #065f46;
+    color: var(--success);
+    border-color: rgba(16, 185, 129, 0.3);
 }
 
 .status-banner.warning {
     background: var(--warning-light);
-    color: #92400e;
+    color: var(--warning);
+    border-color: rgba(245, 158, 11, 0.3);
 }
 
 .status-banner.danger {
     background: var(--danger-light);
-    color: #991b1b;
+    color: var(--danger);
+    border-color: rgba(239, 68, 68, 0.3);
 }
 
 .status-banner.info {
     background: var(--info-light);
-    color: #1e40af;
+    color: var(--info);
+    border-color: rgba(59, 130, 246, 0.3);
 }
 
 .status-banner-icon {
@@ -1155,8 +1318,8 @@ a:hover {
    Winner Cards
    ============================================ */
 .winner-card {
-    background: var(--white);
-    border: 1px solid var(--gray-200);
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
     border-radius: var(--border-radius-lg);
     padding: 16px;
     display: flex;
@@ -1166,17 +1329,17 @@ a:hover {
 
 .winner-card.gold {
     border-color: #fbbf24;
-    background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, var(--bg-card) 100%);
 }
 
 .winner-card.silver {
     border-color: #9ca3af;
-    background: linear-gradient(135deg, #f3f4f6 0%, #ffffff 100%);
+    background: linear-gradient(135deg, rgba(156, 163, 175, 0.1) 0%, var(--bg-card) 100%);
 }
 
 .winner-card.bronze {
     border-color: #d97706;
-    background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%);
+    background: linear-gradient(135deg, rgba(217, 119, 6, 0.1) 0%, var(--bg-card) 100%);
 }
 
 .winner-rank {
@@ -1197,18 +1360,18 @@ a:hover {
 }
 
 .winner-rank-badge.gold {
-    background: #fbbf24;
+    background: linear-gradient(145deg, #fbbf24, #d97706);
     color: #78350f;
 }
 
 .winner-rank-badge.silver {
-    background: #9ca3af;
-    color: var(--white);
+    background: linear-gradient(145deg, #d1d5db, #9ca3af);
+    color: #374151;
 }
 
 .winner-rank-badge.bronze {
-    background: #d97706;
-    color: var(--white);
+    background: linear-gradient(145deg, #f59e0b, #b45309);
+    color: #78350f;
 }
 
 /* ============================================
@@ -1310,7 +1473,7 @@ a:hover {
 .text-success { color: var(--success); }
 .text-warning { color: var(--warning); }
 .text-danger { color: var(--danger); }
-.text-muted { color: var(--gray-500); }
+.text-muted { color: var(--text-muted); }
 
 .font-bold { font-weight: 700; }
 .font-semibold { font-weight: 600; }
@@ -1372,10 +1535,15 @@ a:hover {
         padding: 0;
     }
     
+    body {
+        background: white;
+        color: black;
+    }
+    
     .card {
         break-inside: avoid;
         box-shadow: none;
         border: 1px solid #000;
+        background: white;
     }
 }
-

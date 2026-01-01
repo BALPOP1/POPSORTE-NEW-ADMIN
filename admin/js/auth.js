@@ -135,7 +135,7 @@ window.AdminAuth = (function() {
 
         // Basic validation
         if (!username || !password) {
-            showError(errorEl, 'Por favor, preencha todos os campos');
+            showError(errorEl, 'Please fill in all fields');
             return;
         }
 
@@ -166,15 +166,15 @@ window.AdminAuth = (function() {
                 // Emit login event
                 AdminCore.emit('login', { username });
                 
-                AdminCore.showToast(`Bem-vindo, ${username}!`, 'success');
+                AdminCore.showToast(`Welcome, ${username}!`, 'success');
             } else {
-                showError(errorEl, 'Usuário ou senha incorretos');
+                showError(errorEl, 'Invalid username or password');
                 passwordInput.value = '';
                 passwordInput.focus();
             }
         } catch (error) {
             console.error('Login error:', error);
-            showError(errorEl, 'Erro ao verificar credenciais. Tente novamente.');
+            showError(errorEl, 'Error verifying credentials. Please try again.');
         } finally {
             isLoading = false;
             btnText.style.display = 'inline';
@@ -229,7 +229,7 @@ window.AdminAuth = (function() {
         // Emit logout event
         AdminCore.emit('logout');
         
-        AdminCore.showToast('Sessão encerrada', 'default');
+        AdminCore.showToast('Session ended', 'default');
     }
 
     // ============================================

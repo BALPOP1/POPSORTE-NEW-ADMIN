@@ -49,25 +49,25 @@ window.EntriesPage = (function() {
                 <!-- Validation Status Banner -->
                 <div id="validationBanner" class="status-banner info">
                     <span class="status-banner-icon">ℹ️</span>
-                    <span class="status-banner-text">Carregando dados de validação...</span>
+                    <span class="status-banner-text">Loading validation data...</span>
                 </div>
 
                 <!-- Statistics -->
                 <div class="stats-grid mb-4" id="entriesStats">
                     <div class="stat-card success">
-                        <span class="stat-label">Válidos</span>
+                        <span class="stat-label">Valid</span>
                         <span class="stat-value" id="statValid">--</span>
                     </div>
                     <div class="stat-card danger">
-                        <span class="stat-label">Inválidos</span>
+                        <span class="stat-label">Invalid</span>
                         <span class="stat-value" id="statInvalid">--</span>
                     </div>
                     <div class="stat-card warning">
-                        <span class="stat-label">Após Cutoff</span>
+                        <span class="stat-label">After Cutoff</span>
                         <span class="stat-value" id="statCutoff">--</span>
                     </div>
                     <div class="stat-card primary">
-                        <span class="stat-label">Total Recargas</span>
+                        <span class="stat-label">Total Recharges</span>
                         <span class="stat-value" id="statRecharges">--</span>
                     </div>
                 </div>
@@ -76,44 +76,44 @@ window.EntriesPage = (function() {
                 <div class="filters-row">
                     <div class="filter-group">
                         <label>Game ID</label>
-                        <input type="text" id="filterGameId" placeholder="Buscar ID...">
+                        <input type="text" id="filterGameId" placeholder="Search ID...">
                     </div>
                     <div class="filter-group">
                         <label>WhatsApp</label>
-                        <input type="text" id="filterWhatsapp" placeholder="Buscar WhatsApp...">
+                        <input type="text" id="filterWhatsapp" placeholder="Search WhatsApp...">
                     </div>
                     <div class="filter-group">
-                        <label>Concurso</label>
+                        <label>Contest</label>
                         <select id="filterContest">
-                            <option value="">Todos</option>
+                            <option value="">All</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label>Data Sorteio</label>
+                        <label>Draw Date</label>
                         <select id="filterDrawDate">
-                            <option value="">Todas</option>
+                            <option value="">All</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label>Validade</label>
+                        <label>Validity</label>
                         <select id="filterValidity">
-                            <option value="all">Todos</option>
-                            <option value="valid">Válidos</option>
-                            <option value="invalid">Inválidos</option>
-                            <option value="unknown">Pendentes</option>
+                            <option value="all">All</option>
+                            <option value="valid">Valid</option>
+                            <option value="invalid">Invalid</option>
+                            <option value="unknown">Pending</option>
                         </select>
                     </div>
                     <div class="filter-group">
                         <label>Cutoff</label>
                         <select id="filterCutoff">
-                            <option value="all">Todos</option>
-                            <option value="yes">Após Cutoff</option>
-                            <option value="no">Antes Cutoff</option>
+                            <option value="all">All</option>
+                            <option value="yes">After Cutoff</option>
+                            <option value="no">Before Cutoff</option>
                         </select>
                     </div>
                     <div class="filter-actions">
-                        <button id="btnClearFilters" class="btn btn-secondary btn-sm">Limpar</button>
-                        <button id="btnExportCSV" class="btn btn-primary btn-sm">📥 Exportar CSV</button>
+                        <button id="btnClearFilters" class="btn btn-secondary btn-sm">Clear</button>
+                        <button id="btnExportCSV" class="btn btn-primary btn-sm">📥 Export CSV</button>
                     </div>
                 </div>
 
@@ -124,20 +124,20 @@ window.EntriesPage = (function() {
                             <thead>
                                 <tr>
                                     <th>Status</th>
-                                    <th>Data/Hora</th>
-                                    <th>Plataforma</th>
+                                    <th>Date/Time</th>
+                                    <th>Platform</th>
                                     <th>Game ID</th>
                                     <th>WhatsApp</th>
-                                    <th>Números</th>
-                                    <th>Sorteio</th>
-                                    <th>Concurso</th>
-                                    <th>Bilhete #</th>
-                                    <th>Recarga</th>
-                                    <th>Ações</th>
+                                    <th>Numbers</th>
+                                    <th>Draw</th>
+                                    <th>Contest</th>
+                                    <th>Ticket #</th>
+                                    <th>Recharge</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="entriesTableBody">
-                                <tr><td colspan="11" class="text-center text-muted">Carregando entradas...</td></tr>
+                                <tr><td colspan="11" class="text-center text-muted">Loading entries...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -145,7 +145,7 @@ window.EntriesPage = (function() {
                     <!-- Pagination -->
                     <div class="pagination">
                         <div class="pagination-info" id="paginationInfo">
-                            Mostrando 0-0 de 0 entradas
+                            Showing 0-0 of 0 entries
                         </div>
                         <div class="pagination-controls">
                             <select id="perPageSelect" class="pagination-btn">
@@ -153,9 +153,9 @@ window.EntriesPage = (function() {
                                 <option value="50">50</option>
                                 <option value="100">100</option>
                             </select>
-                            <button id="btnPrevPage" class="pagination-btn" disabled>← Anterior</button>
+                            <button id="btnPrevPage" class="pagination-btn" disabled>← Previous</button>
                             <span id="pageNumbers"></span>
-                            <button id="btnNextPage" class="pagination-btn">Próximo →</button>
+                            <button id="btnNextPage" class="pagination-btn">Next →</button>
                         </div>
                     </div>
                 </div>
@@ -281,7 +281,7 @@ window.EntriesPage = (function() {
             banner.className = 'status-banner warning';
             banner.innerHTML = `
                 <span class="status-banner-icon">⚠️</span>
-                <span class="status-banner-text">Dados de recarga não carregados. A validação pode estar incompleta.</span>
+                <span class="status-banner-text">Recharge data not loaded. Validation may be incomplete.</span>
             `;
         } else if (validationResults) {
             const lastUpdate = AdminCore.formatBrazilDateTime(new Date(), {
@@ -291,7 +291,7 @@ window.EntriesPage = (function() {
             banner.className = 'status-banner success';
             banner.innerHTML = `
                 <span class="status-banner-icon">✅</span>
-                <span class="status-banner-text">Validação carregada. ${recharges.length} recargas processadas. Última atualização: ${lastUpdate}</span>
+                <span class="status-banner-text">Validation loaded. ${recharges.length} recharges processed. Last update: ${lastUpdate}</span>
             `;
         }
     }
@@ -306,7 +306,7 @@ window.EntriesPage = (function() {
         
         const contestSelect = document.getElementById('filterContest');
         if (contestSelect) {
-            contestSelect.innerHTML = '<option value="">Todos</option>' +
+            contestSelect.innerHTML = '<option value="">All</option>' +
                 contests.map(c => `<option value="${c}">${c}</option>`).join('');
         }
         
@@ -315,7 +315,7 @@ window.EntriesPage = (function() {
         
         const drawDateSelect = document.getElementById('filterDrawDate');
         if (drawDateSelect) {
-            drawDateSelect.innerHTML = '<option value="">Todas</option>' +
+            drawDateSelect.innerHTML = '<option value="">All</option>' +
                 drawDates.map(d => `<option value="${d}">${d}</option>`).join('');
         }
     }
@@ -338,7 +338,7 @@ window.EntriesPage = (function() {
         const pageEntries = filteredEntries.slice(start, end);
         
         if (pageEntries.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">Nenhuma entrada encontrada</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No entries found</td></tr>';
             return;
         }
         
@@ -351,13 +351,13 @@ window.EntriesPage = (function() {
             let statusBadge = '';
             switch (status) {
                 case 'VALID':
-                    statusBadge = '<span class="badge badge-success">✅ VÁLIDO</span>';
+                    statusBadge = '<span class="badge badge-success">✅ VALID</span>';
                     break;
                 case 'INVALID':
-                    statusBadge = '<span class="badge badge-danger">❌ INVÁLIDO</span>';
+                    statusBadge = '<span class="badge badge-danger">❌ INVALID</span>';
                     break;
                 default:
-                    statusBadge = '<span class="badge badge-warning">⏳ PENDENTE</span>';
+                    statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
             }
             
             if (isCutoff) {
@@ -404,7 +404,7 @@ window.EntriesPage = (function() {
                     <td>${rechargeInfo}</td>
                     <td>
                         <button class="btn btn-sm btn-outline" onclick="EntriesPage.showDetails('${entry.ticketNumber}')">
-                            Detalhes
+                            Details
                         </button>
                     </td>
                 </tr>
@@ -420,7 +420,7 @@ window.EntriesPage = (function() {
         
         // Update info
         document.getElementById('paginationInfo').textContent = 
-            `Mostrando ${total > 0 ? start : 0}-${end} de ${total} entradas`;
+            `Showing ${total > 0 ? start : 0}-${end} of ${total} entries`;
         
         // Update buttons
         document.getElementById('btnPrevPage').disabled = currentPage <= 1;
@@ -475,8 +475,8 @@ window.EntriesPage = (function() {
                 <div class="status-banner ${statusClass} mb-4">
                     <span class="status-banner-icon">${status === 'VALID' ? '✅' : status === 'INVALID' ? '❌' : '⏳'}</span>
                     <span class="status-banner-text">
-                        <strong>${status}</strong> - ${validation.reason || 'Verificando...'}
-                        ${validation.isCutoff ? '<br><span class="text-warning">⚠️ Registrado após horário de cutoff</span>' : ''}
+                        <strong>${status}</strong> - ${validation.reason || 'Checking...'}
+                        ${validation.isCutoff ? '<br><span class="text-warning">⚠️ Registered after cutoff time</span>' : ''}
                     </span>
                 </div>
             `;
@@ -489,21 +489,21 @@ window.EntriesPage = (function() {
         }).join('');
         
         // Recharge info
-        let rechargeHtml = '<p class="text-muted">Nenhuma recarga vinculada</p>';
+        let rechargeHtml = '<p class="text-muted">No linked recharge</p>';
         if (validation?.matchedRecharge) {
             const r = validation.matchedRecharge;
             rechargeHtml = `
                 <div class="ticket-info-grid">
                     <div class="ticket-info-item">
-                        <span class="label">Valor</span>
+                        <span class="label">Amount</span>
                         <span class="value">R$ ${r.amount?.toFixed(2) || '?'}</span>
                     </div>
                     <div class="ticket-info-item">
-                        <span class="label">ID Recarga</span>
+                        <span class="label">Recharge ID</span>
                         <span class="value">${r.rechargeId || '-'}</span>
                     </div>
                     <div class="ticket-info-item">
-                        <span class="label">Data/Hora</span>
+                        <span class="label">Date/Time</span>
                         <span class="value">${r.rechargeTime ? AdminCore.formatBrazilDateTime(r.rechargeTime) : '-'}</span>
                     </div>
                 </div>
@@ -513,10 +513,10 @@ window.EntriesPage = (function() {
         modalContent.innerHTML = `
             ${statusHtml}
             
-            <h4 class="mb-3">Informações do Bilhete</h4>
+            <h4 class="mb-3">Ticket Information</h4>
             <div class="ticket-info-grid mb-4">
                 <div class="ticket-info-item">
-                    <span class="label">Bilhete #</span>
+                    <span class="label">Ticket #</span>
                     <span class="value">${entry.ticketNumber}</span>
                 </div>
                 <div class="ticket-info-item">
@@ -528,33 +528,33 @@ window.EntriesPage = (function() {
                     <span class="value">${entry.whatsapp || '-'}</span>
                 </div>
                 <div class="ticket-info-item">
-                    <span class="label">Plataforma</span>
+                    <span class="label">Platform</span>
                     <span class="value">${entry.platform}</span>
                 </div>
                 <div class="ticket-info-item">
-                    <span class="label">Concurso</span>
+                    <span class="label">Contest</span>
                     <span class="value">${entry.contest}</span>
                 </div>
                 <div class="ticket-info-item">
-                    <span class="label">Data Sorteio</span>
+                    <span class="label">Draw Date</span>
                     <span class="value">${entry.drawDate}</span>
                 </div>
                 <div class="ticket-info-item">
-                    <span class="label">Registro</span>
+                    <span class="label">Registered</span>
                     <span class="value">${entry.parsedDate ? AdminCore.formatBrazilDateTime(entry.parsedDate) : entry.timestamp}</span>
                 </div>
                 <div class="ticket-info-item">
-                    <span class="label">Status Original</span>
+                    <span class="label">Original Status</span>
                     <span class="value">${entry.status}</span>
                 </div>
             </div>
             
-            <h4 class="mb-3">Números Escolhidos</h4>
+            <h4 class="mb-3">Selected Numbers</h4>
             <div class="numbers-display mb-4">
                 ${numbersHtml}
             </div>
             
-            <h4 class="mb-3">Recarga Vinculada</h4>
+            <h4 class="mb-3">Linked Recharge</h4>
             ${rechargeHtml}
         `;
         
@@ -568,22 +568,22 @@ window.EntriesPage = (function() {
     function exportCSV() {
         const data = filteredEntries;
         if (data.length === 0) {
-            AdminCore.showToast('Nenhum dado para exportar', 'warning');
+            AdminCore.showToast('No data to export', 'warning');
             return;
         }
         
         // Build CSV
         const headers = [
             'Status',
-            'Data/Hora',
-            'Plataforma',
+            'Date/Time',
+            'Platform',
             'Game ID',
             'WhatsApp',
-            'Números',
-            'Data Sorteio',
-            'Concurso',
-            'Bilhete #',
-            'Status Original'
+            'Numbers',
+            'Draw Date',
+            'Contest',
+            'Ticket #',
+            'Original Status'
         ];
         
         // Get validation map
@@ -618,10 +618,10 @@ window.EntriesPage = (function() {
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `entradas_${AdminCore.getBrazilDateString(new Date())}.csv`;
+        link.download = `entries_${AdminCore.getBrazilDateString(new Date())}.csv`;
         link.click();
         
-        AdminCore.showToast(`${data.length} entradas exportadas`, 'success');
+        AdminCore.showToast(`${data.length} entries exported`, 'success');
     }
 
     // ============================================
@@ -682,7 +682,7 @@ window.EntriesPage = (function() {
             
         } catch (error) {
             console.error('Error loading entries data:', error);
-            AdminCore.showToast('Erro ao carregar entradas', 'error');
+            AdminCore.showToast('Error loading entries', 'error');
         }
     }
 
@@ -788,4 +788,3 @@ window.EntriesPage = (function() {
         exportCSV
     };
 })();
-

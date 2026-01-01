@@ -43,31 +43,31 @@ window.DashboardPage = (function() {
                 <!-- All-Time Stats -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">📊 Dados Gerais (All Time)</h2>
+                        <h2 class="section-title">📊 General Data (All Time)</h2>
                     </div>
                     <div class="stats-grid" id="allTimeStats">
                         <div class="stat-card primary">
-                            <span class="stat-label">Total de Bilhetes</span>
+                            <span class="stat-label">Total Tickets</span>
                             <span class="stat-value" id="statTotalTickets">--</span>
                         </div>
                         <div class="stat-card info">
-                            <span class="stat-label">Total de Concursos</span>
+                            <span class="stat-label">Total Contests</span>
                             <span class="stat-value" id="statTotalContests">--</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">Datas de Sorteio</span>
+                            <span class="stat-label">Draw Dates</span>
                             <span class="stat-value" id="statDrawDates">--</span>
                         </div>
                         <div class="stat-card warning">
-                            <span class="stat-label">Pendentes</span>
+                            <span class="stat-label">Pending</span>
                             <span class="stat-value" id="statPending">--</span>
                         </div>
                         <div class="stat-card success">
-                            <span class="stat-label">Total de Ganhadores</span>
+                            <span class="stat-label">Total Winners</span>
                             <span class="stat-value" id="statTotalWinners">--</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">Taxa de Vitória</span>
+                            <span class="stat-label">Win Rate</span>
                             <span class="stat-value" id="statWinRate">--</span>
                         </div>
                     </div>
@@ -76,26 +76,26 @@ window.DashboardPage = (function() {
                 <!-- Engagement Overview -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">👥 Visão de Engajamento</h2>
+                        <h2 class="section-title">👥 Engagement Overview</h2>
                     </div>
                     <div class="grid-2">
                         <div class="card">
                             <div class="card-body">
                                 <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
                                     <div class="stat-card success">
-                                        <span class="stat-label">Recarregadores</span>
+                                        <span class="stat-label">Rechargers</span>
                                         <span class="stat-value" id="statRechargers">--</span>
                                     </div>
                                     <div class="stat-card primary">
-                                        <span class="stat-label">Participantes</span>
+                                        <span class="stat-label">Participants</span>
                                         <span class="stat-value" id="statParticipants">--</span>
                                     </div>
                                     <div class="stat-card warning">
-                                        <span class="stat-label">Recarregou sem Bilhete</span>
+                                        <span class="stat-label">Recharged No Ticket</span>
                                         <span class="stat-value" id="statNoTicket">--</span>
                                     </div>
                                     <div class="stat-card info">
-                                        <span class="stat-label">Taxa de Participação</span>
+                                        <span class="stat-label">Participation Rate</span>
                                         <span class="stat-value" id="statParticipationRate">--</span>
                                     </div>
                                 </div>
@@ -103,8 +103,8 @@ window.DashboardPage = (function() {
                         </div>
                         <div class="card">
                             <div class="card-header">
-                                <h3 class="card-title">Criadores de Bilhete</h3>
-                                <span class="text-muted">Hoje vs Ontem</span>
+                                <h3 class="card-title">Ticket Creators</h3>
+                                <span class="text-muted">Today vs Yesterday</span>
                             </div>
                             <div class="card-body">
                                 <div class="chart-container" style="height: 200px;">
@@ -118,14 +118,14 @@ window.DashboardPage = (function() {
                 <!-- Last 7 Days Chart -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">📈 Últimos 7 Dias</h2>
+                        <h2 class="section-title">📈 Last 7 Days</h2>
                         <div class="filter-group">
                             <select id="chartMetricSelect" class="form-select" style="width: auto;">
-                                <option value="all">Todas as métricas</option>
-                                <option value="entries">Bilhetes</option>
-                                <option value="rechargers">Recarregadores</option>
-                                <option value="participants">Participantes</option>
-                                <option value="noTicket">Sem Bilhete</option>
+                                <option value="all">All metrics</option>
+                                <option value="entries">Tickets</option>
+                                <option value="rechargers">Rechargers</option>
+                                <option value="participants">Participants</option>
+                                <option value="noTicket">No Ticket</option>
                             </select>
                         </div>
                     </div>
@@ -141,24 +141,24 @@ window.DashboardPage = (function() {
                 <!-- Recharge vs Tickets Table -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">📊 Recargas vs Bilhetes (Últimos 7 Dias)</h2>
+                        <h2 class="section-title">📊 Recharges vs Tickets (Last 7 Days)</h2>
                     </div>
                     <div class="card">
                         <div class="table-container">
                             <table class="table" id="rechargeVsTicketsTable">
                                 <thead>
                                     <tr>
-                                        <th>Data</th>
-                                        <th>Recarregadores</th>
-                                        <th>Criadores</th>
-                                        <th>Sem Bilhete</th>
-                                        <th>Participação %</th>
-                                        <th>Não Part. %</th>
-                                        <th>Total Bilhetes</th>
+                                        <th>Date</th>
+                                        <th>Rechargers</th>
+                                        <th>Creators</th>
+                                        <th>No Ticket</th>
+                                        <th>Participation %</th>
+                                        <th>Non-Part. %</th>
+                                        <th>Total Tickets</th>
                                     </tr>
                                 </thead>
                                 <tbody id="rechargeVsTicketsBody">
-                                    <tr><td colspan="7" class="text-center text-muted">Carregando...</td></tr>
+                                    <tr><td colspan="7" class="text-center text-muted">Loading...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -168,12 +168,12 @@ window.DashboardPage = (function() {
                 <!-- Winners by Contest -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">🏆 Ganhadores por Concurso</h2>
+                        <h2 class="section-title">🏆 Winners by Contest</h2>
                     </div>
                     <div id="winnersByContestContainer" class="grid-2">
                         <div class="card">
                             <div class="card-body text-center text-muted">
-                                Carregando ganhadores...
+                                Loading winners...
                             </div>
                         </div>
                     </div>
@@ -182,7 +182,7 @@ window.DashboardPage = (function() {
                 <!-- Top Entrants -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">🎯 Top Participantes</h2>
+                        <h2 class="section-title">🎯 Top Participants</h2>
                     </div>
                     <div class="card">
                         <div class="table-container">
@@ -191,13 +191,13 @@ window.DashboardPage = (function() {
                                     <tr>
                                         <th>#</th>
                                         <th>WhatsApp</th>
-                                        <th>Total Entradas</th>
-                                        <th>Vitórias</th>
-                                        <th>Melhor Prêmio</th>
+                                        <th>Total Entries</th>
+                                        <th>Wins</th>
+                                        <th>Best Prize</th>
                                     </tr>
                                 </thead>
                                 <tbody id="topEntrantsBody">
-                                    <tr><td colspan="5" class="text-center text-muted">Carregando...</td></tr>
+                                    <tr><td colspan="5" class="text-center text-muted">Loading...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -207,12 +207,12 @@ window.DashboardPage = (function() {
                 <!-- Latest Entries -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">🎫 Últimas Entradas</h2>
+                        <h2 class="section-title">🎫 Latest Entries</h2>
                     </div>
                     <div id="latestEntriesContainer" class="grid-3">
                         <div class="card">
                             <div class="card-body text-center text-muted">
-                                Carregando entradas...
+                                Loading entries...
                             </div>
                         </div>
                     </div>
@@ -315,7 +315,7 @@ window.DashboardPage = (function() {
         if (!tbody) return;
         
         if (dailyData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Sem dados</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data</td></tr>';
             return;
         }
         
@@ -358,7 +358,7 @@ window.DashboardPage = (function() {
                 container.innerHTML = `
                     <div class="card">
                         <div class="card-body text-center text-muted">
-                            Nenhum resultado de concurso disponível
+                            No contest results available
                         </div>
                     </div>
                 `;
@@ -384,22 +384,22 @@ window.DashboardPage = (function() {
                     <div class="card">
                         <div class="card-header">
                             <div>
-                                <h4 class="card-title mb-0">Concurso #${contest.contest}</h4>
+                                <h4 class="card-title mb-0">Contest #${contest.contest}</h4>
                                 <span class="text-muted">${contest.drawDate}</span>
                             </div>
-                            <span class="badge badge-gray">${contest.totalEntries} entradas</span>
+                            <span class="badge badge-gray">${contest.totalEntries} entries</span>
                         </div>
                         <div class="card-body">
                             <div class="mb-3">
-                                <span class="text-muted" style="font-size: 0.75rem;">Números Sorteados</span>
+                                <span class="text-muted" style="font-size: 0.75rem;">Winning Numbers</span>
                                 <div class="numbers-display mt-1">
                                     ${numbersHtml}
                                 </div>
                             </div>
                             <div>
-                                <span class="text-muted" style="font-size: 0.75rem;">Ganhadores por Acertos</span>
+                                <span class="text-muted" style="font-size: 0.75rem;">Winners by Matches</span>
                                 <div class="d-flex gap-2 mt-1" style="flex-wrap: wrap;">
-                                    ${tierCounts.length > 0 ? tierCounts.join('') : '<span class="text-muted">Nenhum ganhador</span>'}
+                                    ${tierCounts.length > 0 ? tierCounts.join('') : '<span class="text-muted">No winners</span>'}
                                 </div>
                             </div>
                         </div>
@@ -412,7 +412,7 @@ window.DashboardPage = (function() {
             container.innerHTML = `
                 <div class="card">
                     <div class="card-body text-center text-danger">
-                        Erro ao carregar ganhadores
+                        Error loading winners
                     </div>
                 </div>
             `;
@@ -439,7 +439,7 @@ window.DashboardPage = (function() {
             });
             
             if (topEntrants.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum participante</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No participants</td></tr>';
                 return;
             }
             
@@ -447,7 +447,7 @@ window.DashboardPage = (function() {
                 const wins = winsLookup[entrant.gameId];
                 const totalWins = wins ? wins.totalWins : 0;
                 const bestMatch = wins ? wins.bestMatch : 0;
-                const bestPrize = bestMatch > 0 ? `${WinnerCalculator.PRIZE_TIERS[bestMatch]?.emoji || ''} ${bestMatch} acertos` : '-';
+                const bestPrize = bestMatch > 0 ? `${WinnerCalculator.PRIZE_TIERS[bestMatch]?.emoji || ''} ${bestMatch} matches` : '-';
                 
                 return `
                     <tr>
@@ -462,7 +462,7 @@ window.DashboardPage = (function() {
             
         } catch (error) {
             console.error('Error rendering top entrants:', error);
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Erro ao carregar</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading</td></tr>';
         }
     }
 
@@ -480,7 +480,7 @@ window.DashboardPage = (function() {
             container.innerHTML = `
                 <div class="card">
                     <div class="card-body text-center text-muted">
-                        Nenhuma entrada encontrada
+                        No entries found
                     </div>
                 </div>
             `;
@@ -501,11 +501,11 @@ window.DashboardPage = (function() {
             }[entry.status.toUpperCase()] || 'warning';
             
             const statusLabel = {
-                'VALID': 'Válido',
-                'VALIDADO': 'Válido',
-                'INVALID': 'Inválido',
-                'INVÁLIDO': 'Inválido'
-            }[entry.status.toUpperCase()] || 'Pendente';
+                'VALID': 'Valid',
+                'VALIDADO': 'Valid',
+                'INVALID': 'Invalid',
+                'INVÁLIDO': 'Invalid'
+            }[entry.status.toUpperCase()] || 'Pending';
             
             const formattedTime = entry.parsedDate
                 ? AdminCore.formatBrazilDateTime(entry.parsedDate, {
@@ -531,7 +531,7 @@ window.DashboardPage = (function() {
                             ${numbersHtml}
                         </div>
                         <div class="d-flex justify-between" style="font-size: 0.75rem;">
-                            <span class="text-muted">Concurso: <strong>${entry.contest}</strong></span>
+                            <span class="text-muted">Contest: <strong>${entry.contest}</strong></span>
                             <span class="text-muted">${entry.drawDate}</span>
                         </div>
                     </div>
@@ -569,7 +569,7 @@ window.DashboardPage = (function() {
             
         } catch (error) {
             console.error('Error loading dashboard data:', error);
-            AdminCore.showToast('Erro ao carregar dados do dashboard', 'error');
+            AdminCore.showToast('Error loading dashboard data', 'error');
         }
     }
 
@@ -656,4 +656,3 @@ window.DashboardPage = (function() {
         loadData
     };
 })();
-

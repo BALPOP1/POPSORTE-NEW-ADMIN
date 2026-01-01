@@ -394,9 +394,9 @@ window.AdminCore = (function() {
         // Update page title
         const pageTitles = {
             dashboard: 'Dashboard',
-            entries: 'Entradas',
-            results: 'Resultados',
-            winners: 'Ganhadores'
+            entries: 'Entries',
+            results: 'Results',
+            winners: 'Winners'
         };
         const pageTitle = document.getElementById('pageTitle');
         if (pageTitle) {
@@ -446,7 +446,7 @@ window.AdminCore = (function() {
     function updateLastRefreshDisplay() {
         const el = document.getElementById('lastRefresh');
         if (el) {
-            el.textContent = `Última atualização: ${formatBrazilDateTime(new Date(), {
+            el.textContent = `Last update: ${formatBrazilDateTime(new Date(), {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit'
@@ -472,7 +472,7 @@ window.AdminCore = (function() {
             updateLastRefreshDisplay();
         } catch (error) {
             console.error('Refresh error:', error);
-            showToast('Erro ao atualizar dados', 'error');
+            showToast('Error refreshing data', 'error');
         } finally {
             isRefreshing = false;
             if (refreshBtn) {

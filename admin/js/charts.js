@@ -152,7 +152,7 @@ window.AdminCharts = (function() {
         // Total Entries (Tickets)
         if (metric === 'all' || metric === 'entries') {
             datasets.push({
-                label: 'Total Bilhetes',
+                label: 'Total Tickets',
                 data: data.map(d => d.totalEntries || 0),
                 borderColor: colors.primary,
                 backgroundColor: colors.primaryLight,
@@ -166,7 +166,7 @@ window.AdminCharts = (function() {
         // Unique Rechargers
         if (metric === 'all' || metric === 'rechargers') {
             datasets.push({
-                label: 'Recarregadores',
+                label: 'Rechargers',
                 data: data.map(d => d.totalRechargers || 0),
                 borderColor: colors.success,
                 backgroundColor: colors.successLight,
@@ -180,7 +180,7 @@ window.AdminCharts = (function() {
         // Participants
         if (metric === 'all' || metric === 'participants') {
             datasets.push({
-                label: 'Participantes',
+                label: 'Participants',
                 data: data.map(d => d.totalParticipants || 0),
                 borderColor: colors.info,
                 backgroundColor: colors.infoLight,
@@ -194,7 +194,7 @@ window.AdminCharts = (function() {
         // Recharged No Ticket
         if (metric === 'all' || metric === 'noTicket') {
             datasets.push({
-                label: 'Recarregou sem Bilhete',
+                label: 'Recharged No Ticket',
                 data: data.map(d => d.rechargedNoTicket || 0),
                 borderColor: colors.warning,
                 backgroundColor: colors.warningLight,
@@ -242,7 +242,7 @@ window.AdminCharts = (function() {
                 labels,
                 datasets: [
                     {
-                        label: 'Criadores de Bilhete',
+                        label: 'Ticket Creators',
                         data: [
                             comparisonData.date2.uniqueCreators,
                             comparisonData.date1.uniqueCreators
@@ -303,7 +303,7 @@ window.AdminCharts = (function() {
         for (let tier = 5; tier >= 1; tier--) {
             const count = stats.byTier[tier] || 0;
             if (count > 0) {
-                labels.push(`${tier} acertos`);
+                labels.push(`${tier} matches`);
                 data.push(count);
                 backgroundColors.push(tierColors[tier]);
             }
@@ -311,7 +311,7 @@ window.AdminCharts = (function() {
         
         // If no winners, show empty state
         if (data.length === 0) {
-            labels.push('Sem ganhadores');
+            labels.push('No winners');
             data.push(1);
             backgroundColors.push('#e5e7eb');
         }
@@ -371,7 +371,7 @@ window.AdminCharts = (function() {
             data: {
                 labels: data.map(d => d.displayDate),
                 datasets: [{
-                    label: 'Bilhetes Criados',
+                    label: 'Tickets Created',
                     data: data.map(d => d.totalTickets || 0),
                     backgroundColor: colors.primary,
                     borderRadius: 4,
@@ -408,7 +408,7 @@ window.AdminCharts = (function() {
         const config = {
             type: 'doughnut',
             data: {
-                labels: ['Participação', 'Não participou'],
+                labels: ['Participation', 'No participation'],
                 datasets: [{
                     data: [rate, remaining],
                     backgroundColor: [colors.success, '#e5e7eb'],
