@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POP-SORTE Admin</title>
+    <link rel="icon" type="image/png" href="../media/qui.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/admin.css">
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal-overlay">
+        <div class="modal-content login-modal">
+            <div class="login-header">
+                <img src="../media/qui.png" alt="POP-SORTE" class="login-logo">
+                <h1>POP-SORTE Admin</h1>
+                <p>Entre com suas credenciais para acessar o painel</p>
+            </div>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">Usuário</label>
+                    <input type="text" id="username" name="username" required autocomplete="username" placeholder="Digite seu usuário">
+                </div>
+                <div class="form-group">
+                    <label for="password">Senha</label>
+                    <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="Digite sua senha">
+                </div>
+                <div id="loginError" class="error-message"></div>
+                <button type="submit" class="btn btn-primary btn-block">
+                    <span class="btn-text">Entrar</span>
+                    <span class="btn-loading" style="display:none;">Verificando...</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="appContainer" class="app-container" style="display:none;">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <img src="../media/qui.png" alt="POP-SORTE" class="sidebar-logo">
+                <h2>POP-SORTE</h2>
+                <span class="admin-badge">ADMIN</span>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <a href="#dashboard" class="nav-link active" data-page="dashboard">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">Dashboard</span>
+                </a>
+                <a href="#entries" class="nav-link" data-page="entries">
+                    <span class="nav-icon">🎫</span>
+                    <span class="nav-text">Entradas</span>
+                </a>
+                <a href="#results" class="nav-link" data-page="results">
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-text">Resultados</span>
+                </a>
+                <a href="#winners" class="nav-link" data-page="winners">
+                    <span class="nav-icon">🏆</span>
+                    <span class="nav-text">Ganhadores</span>
+                </a>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <span class="user-icon">👤</span>
+                    <span id="currentUser" class="user-name">Admin</span>
+                </div>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">
+                    Sair
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <button id="sidebarToggle" class="sidebar-toggle">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </button>
+                <div class="topbar-left">
+                    <h1 id="pageTitle">Dashboard</h1>
+                </div>
+                <div class="topbar-right">
+                    <div class="refresh-status">
+                        <span id="lastRefresh">Última atualização: --</span>
+                        <button id="refreshBtn" class="btn btn-icon" title="Atualizar dados">
+                            🔄
+                        </button>
+                    </div>
+                    <div id="connectionStatus" class="connection-status online">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Online</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Page Container -->
+            <div id="pageContainer" class="page-container">
+                <!-- Dashboard Page -->
+                <section id="page-dashboard" class="page active">
+                    <div class="page-loading">
+                        <div class="spinner"></div>
+                        <p>Carregando dashboard...</p>
+                    </div>
+                </section>
+
+                <!-- Entries Page -->
+                <section id="page-entries" class="page">
+                    <div class="page-loading">
+                        <div class="spinner"></div>
+                        <p>Carregando entradas...</p>
+                    </div>
+                </section>
+
+                <!-- Results Page -->
+                <section id="page-results" class="page">
+                    <div class="page-loading">
+                        <div class="spinner"></div>
+                        <p>Carregando resultados...</p>
+                    </div>
+                </section>
+
+                <!-- Winners Page -->
+                <section id="page-winners" class="page">
+                    <div class="page-loading">
+                        <div class="spinner"></div>
+                        <p>Carregando ganhadores...</p>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Ticket Details Modal -->
+    <div id="ticketModal" class="modal-overlay" style="display:none;">
+        <div class="modal-content ticket-modal">
+            <div class="modal-header">
+                <h2>Detalhes do Bilhete</h2>
+                <button class="modal-close" data-close="ticketModal">&times;</button>
+            </div>
+            <div id="ticketModalContent" class="modal-body">
+                <!-- Content populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/admin-core.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/data-fetcher.js"></script>
+    <script src="js/results-fetcher.js"></script>
+    <script src="js/recharge-validator.js"></script>
+    <script src="js/winner-calculator.js"></script>
+    <script src="js/charts.js"></script>
+    <script src="js/pages/dashboard.js"></script>
+    <script src="js/pages/entries.js"></script>
+    <script src="js/pages/results.js"></script>
+    <script src="js/pages/winners.js"></script>
+</body>
+</html>
+
