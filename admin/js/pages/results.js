@@ -221,7 +221,9 @@ window.ResultsPage = (function() {
     
     async function loadData() {
         try {
+            // Fetch data - returns immediately if cached
             results = await ResultsFetcher.fetchResults();
+            
             filteredResults = [...results];
             
             renderStats();
@@ -230,7 +232,7 @@ window.ResultsPage = (function() {
             
         } catch (error) {
             console.error('Error loading results:', error);
-            AdminCore.showToast('Error loading results', 'error');
+            AdminCore.showToast('Error loading results: ' + error.message, 'error');
             
             const tbody = document.getElementById('resultsTableBody');
             if (tbody) {
@@ -283,14 +285,14 @@ window.ResultsPage = (function() {
             if (page === 'results') {
                 if (!isInitialized) {
                     init();
-                } else {
-                    refresh();
                 }
+                // Don't auto-refresh when returning to page - wait for manual refresh or timer
             }
         });
         
+        // Only refresh on explicit refresh action
         AdminCore.on('refresh', () => {
-            if (AdminCore.getCurrentPage() === 'results') {
+            if (AdminCore.getCurrentPage() === 'results' && isInitialized) {
                 refresh();
             }
         });

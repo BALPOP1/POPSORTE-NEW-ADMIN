@@ -665,13 +665,17 @@ window.EntriesPage = (function() {
     
     async function loadData() {
         try {
-            // Fetch data in parallel
-            const [entries, recharges] = await Promise.all([
-                DataFetcher.fetchEntries(),
-                DataFetcher.fetchRecharges().catch(() => [])
-            ]);
+            // Fetch data - these return immediately if cached
+            const entries = await DataFetcher.fetchEntries();
             
-            // Validate all tickets
+            let recharges = [];
+            try {
+                recharges = await DataFetcher.fetchRecharges();
+            } catch (e) {
+                console.warn('Could not fetch recharges:', e);
+            }
+            
+            // Validate all tickets (uses caching internally)
             const validationResults = await RechargeValidator.validateAllTickets(entries, recharges);
             
             currentData = { entries, recharges, validationResults };
@@ -684,7 +688,7 @@ window.EntriesPage = (function() {
             
         } catch (error) {
             console.error('Error loading entries data:', error);
-            AdminCore.showToast('Error loading entries', 'error');
+            AdminCore.showToast('Error loading entries: ' + error.message, 'error');
         }
     }
 
@@ -769,14 +773,14 @@ window.EntriesPage = (function() {
             if (page === 'entries') {
                 if (!isInitialized) {
                     init();
-                } else {
-                    refresh();
                 }
+                // Don't auto-refresh when returning to page - wait for manual refresh or timer
             }
         });
         
+        // Only refresh on explicit refresh action
         AdminCore.on('refresh', () => {
-            if (AdminCore.getCurrentPage() === 'entries') {
+            if (AdminCore.getCurrentPage() === 'entries' && isInitialized) {
                 refresh();
             }
         });

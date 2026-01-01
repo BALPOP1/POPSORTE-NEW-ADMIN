@@ -425,13 +425,11 @@ window.WinnersPage = (function() {
     
     async function loadData() {
         try {
-            // Fetch data in parallel
-            const [entries, results] = await Promise.all([
-                DataFetcher.fetchEntries(),
-                ResultsFetcher.fetchResults()
-            ]);
+            // Fetch data - these return immediately if cached
+            const entries = await DataFetcher.fetchEntries();
+            const results = await ResultsFetcher.fetchResults();
             
-            // Calculate all winners
+            // Calculate all winners (uses caching internally)
             const calculation = await WinnerCalculator.calculateAllWinners(entries, results);
             
             currentData = { entries, results, calculation };
@@ -445,7 +443,7 @@ window.WinnersPage = (function() {
             
         } catch (error) {
             console.error('Error loading winners data:', error);
-            AdminCore.showToast('Error loading winners', 'error');
+            AdminCore.showToast('Error loading winners: ' + error.message, 'error');
         }
     }
 
@@ -515,14 +513,14 @@ window.WinnersPage = (function() {
             if (page === 'winners') {
                 if (!isInitialized) {
                     init();
-                } else {
-                    refresh();
                 }
+                // Don't auto-refresh when returning to page - wait for manual refresh or timer
             }
         });
         
+        // Only refresh on explicit refresh action
         AdminCore.on('refresh', () => {
-            if (AdminCore.getCurrentPage() === 'winners') {
+            if (AdminCore.getCurrentPage() === 'winners' && isInitialized) {
                 refresh();
             }
         });

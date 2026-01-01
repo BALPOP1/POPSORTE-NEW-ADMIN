@@ -40,6 +40,9 @@ window.ResultsFetcher = (function() {
         results: { data: null, timestamp: 0 }
     };
 
+    // Fetch lock to prevent simultaneous requests
+    let fetchLock = false;
+
     // ============================================
     // Fetch Helper
     // ============================================
@@ -163,12 +166,21 @@ window.ResultsFetcher = (function() {
             return cache.results.data;
         }
 
+        // Return cached data if fetch is in progress - don't block, just use cache
+        if (fetchLock) {
+            console.log('Results fetch already in progress, using cached data');
+            return cache.results.data || [];
+        }
+
+        fetchLock = true;
+
         try {
             const csvText = await fetchCSV(RESULTS_SHEET_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
 
             if (lines.length <= 1) {
                 cache.results = { data: [], timestamp: now };
+                fetchLock = false;
                 return [];
             }
 
@@ -191,10 +203,12 @@ window.ResultsFetcher = (function() {
             });
 
             cache.results = { data: results, timestamp: now };
+            fetchLock = false;
             return results;
 
         } catch (error) {
             console.error('Error fetching results:', error);
+            fetchLock = false;
             if (cache.results.data) {
                 return cache.results.data;
             }

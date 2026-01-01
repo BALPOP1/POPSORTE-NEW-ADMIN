@@ -357,24 +357,36 @@ window.RechargeValidator = (function() {
             cutoff: 0
         };
         
-        // Process all entries synchronously for speed
-        for (const entry of entries) {
-            const validation = validateTicket(entry, rechargesByGameId, ticketsByGameId);
-            results.push(validation);
+        // Process in smaller batches to keep UI responsive
+        const batchSize = 50;
+        const totalBatches = Math.ceil(entries.length / batchSize);
+        
+        for (let i = 0; i < entries.length; i += batchSize) {
+            const batch = entries.slice(i, i + batchSize);
             
-            switch (validation.status) {
-                case ValidationStatus.VALID:
-                    stats.valid++;
-                    break;
-                case ValidationStatus.INVALID:
-                    stats.invalid++;
-                    break;
-                default:
-                    stats.unknown++;
+            for (const entry of batch) {
+                const validation = validateTicket(entry, rechargesByGameId, ticketsByGameId);
+                results.push(validation);
+                
+                switch (validation.status) {
+                    case ValidationStatus.VALID:
+                        stats.valid++;
+                        break;
+                    case ValidationStatus.INVALID:
+                        stats.invalid++;
+                        break;
+                    default:
+                        stats.unknown++;
+                }
+                
+                if (validation.isCutoff) {
+                    stats.cutoff++;
+                }
             }
             
-            if (validation.isCutoff) {
-                stats.cutoff++;
+            // Yield to main thread after each batch - use longer delay for UI responsiveness
+            if (i + batchSize < entries.length) {
+                await new Promise(resolve => setTimeout(resolve, 5));
             }
         }
         

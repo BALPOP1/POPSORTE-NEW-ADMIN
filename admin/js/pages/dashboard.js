@@ -28,7 +28,6 @@ window.DashboardPage = (function() {
         recharges: [],
         results: []
     };
-    let cachedDailyData = null; // Cache for engagement analysis
 
     // ============================================
     // HTML Templates
@@ -317,15 +316,12 @@ window.DashboardPage = (function() {
      * @param {string} metric - Selected metric
      */
     function renderLast7DaysChart(metric = 'all') {
-        // Use cached data or calculate if not available
-        if (!cachedDailyData) {
-            const { entries, recharges } = currentData;
-            cachedDailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
-        }
+        const { entries, recharges } = currentData;
+        const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
         
         const canvas = document.getElementById('chartLast7Days');
         if (canvas) {
-            AdminCharts.createLast7DaysChart(canvas, cachedDailyData, metric);
+            AdminCharts.createLast7DaysChart(canvas, dailyData, metric);
         }
     }
 
@@ -333,13 +329,8 @@ window.DashboardPage = (function() {
      * Render recharge vs tickets table
      */
     function renderRechargeVsTicketsTable() {
-        const { recharges } = currentData;
-        // Use cached data or calculate if not available
-        if (!cachedDailyData) {
-            const { entries } = currentData;
-            cachedDailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
-        }
-        const dailyData = cachedDailyData;
+        const { entries, recharges } = currentData;
+        const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
         
         const tbody = document.getElementById('rechargeVsTicketsBody');
         if (!tbody) return;
@@ -561,21 +552,25 @@ window.DashboardPage = (function() {
     // ============================================
     
     /**
-     * Load all dashboard data
+     * Load all dashboard data with progressive loading
      */
     async function loadData() {
         try {
-            // Fetch all data in parallel - use cached if available
-            const [entries, results, recharges] = await Promise.all([
-                DataFetcher.fetchEntries(),
-                ResultsFetcher.fetchResults(),
-                DataFetcher.fetchRecharges().catch(() => [])
-            ]);
+            // Fetch data - these return immediately if cached
+            const entries = await DataFetcher.fetchEntries();
+            const results = await ResultsFetcher.fetchResults();
+            
+            // Fetch recharges (can fail gracefully)
+            let recharges = [];
+            try {
+                recharges = await DataFetcher.fetchRecharges();
+            } catch (e) {
+                console.warn('Could not fetch recharges:', e);
+            }
             
             currentData = { entries, recharges, results };
-            cachedDailyData = null; // Clear cache when data changes
             
-            // Render all sections
+            // Render all sections (data is already loaded, so this is fast)
             renderAllTimeStats();
             renderLatestEntries();
             renderEngagementOverview();
@@ -587,7 +582,7 @@ window.DashboardPage = (function() {
             
         } catch (error) {
             console.error('Error loading dashboard data:', error);
-            AdminCore.showToast('Error loading data', 'error');
+            AdminCore.showToast('Error loading data: ' + error.message, 'error');
         }
     }
 
@@ -643,24 +638,28 @@ window.DashboardPage = (function() {
             if (page === 'dashboard') {
                 if (!isInitialized) {
                     init();
-                } else {
-                    refresh();
                 }
+                // Don't auto-refresh when returning to dashboard - wait for manual refresh or timer
             }
         });
         
-        AdminCore.on('refresh', refresh);
+        // Only refresh on explicit refresh action
+        AdminCore.on('refresh', () => {
+            if (AdminCore.getCurrentPage() === 'dashboard' && isInitialized) {
+                refresh();
+            }
+        });
     }
 
-    // Initialize if dashboard is the current page
+    // Initialize if dashboard is the current page (only once on load)
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
-            if (window.location.hash === '#dashboard' || window.location.hash === '') {
+            if (!isInitialized && (window.location.hash === '#dashboard' || window.location.hash === '')) {
                 init();
             }
         });
     } else {
-        if (window.location.hash === '#dashboard' || window.location.hash === '') {
+        if (!isInitialized && (window.location.hash === '#dashboard' || window.location.hash === '')) {
             init();
         }
     }
