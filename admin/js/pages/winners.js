@@ -508,7 +508,12 @@ window.WinnersPage = (function() {
         
         container.innerHTML = getTemplate();
         bindEvents();
-        loadData();
+        
+        // Load data asynchronously - don't block initialization
+        loadData().catch(error => {
+            console.error('Error loading winners data:', error);
+            AdminCore.showToast('Error loading winners: ' + error.message, 'error');
+        });
         
         isInitialized = true;
     }

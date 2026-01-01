@@ -817,7 +817,12 @@ window.EntriesPage = (function() {
         
         container.innerHTML = getTemplate();
         bindEvents();
-        loadData();
+        
+        // Load data asynchronously - don't block initialization
+        loadData().catch(error => {
+            console.error('Error loading entries data:', error);
+            AdminCore.showToast('Error loading entries: ' + error.message, 'error');
+        });
         
         isInitialized = true;
     }

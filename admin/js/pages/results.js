@@ -268,7 +268,12 @@ window.ResultsPage = (function() {
         
         container.innerHTML = getTemplate();
         bindEvents();
-        loadData();
+        
+        // Load data asynchronously - don't block initialization
+        loadData().catch(error => {
+            console.error('Error loading results data:', error);
+            AdminCore.showToast('Error loading results: ' + error.message, 'error');
+        });
         
         isInitialized = true;
     }
