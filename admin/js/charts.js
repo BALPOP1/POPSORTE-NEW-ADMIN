@@ -23,6 +23,7 @@ window.AdminCharts = (function() {
     // ============================================
     // Color Palette (Dark Theme)
     // ============================================
+    
     const colors = {
         primary: '#06b6d4',
         primaryLight: 'rgba(6, 182, 212, 0.15)',

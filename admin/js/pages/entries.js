@@ -354,7 +354,7 @@ window.EntriesPage = (function() {
         }
     }
 
-    // Build comprehensive validation map with multiple keys (cached)
+    // Build validation map - simple approach: match by ticketNumber only
     function buildValidationMap() {
         // Return cached map if validation results haven't changed
         if (cachedValidationMap && currentData.validationResults) {
@@ -367,19 +367,11 @@ window.EntriesPage = (function() {
             return map;
         }
         
+        // Simple mapping: ticketNumber -> validation result
         currentData.validationResults.results.forEach(v => {
-            const ticket = v.ticket;
-            // Key 1: ticketNumber (primary)
-            if (ticket.ticketNumber) {
-                map.set(ticket.ticketNumber, v);
-            }
-            // Key 2: gameId + timestamp (fallback)
-            if (ticket.gameId && ticket.timestamp) {
-                map.set(`${ticket.gameId}|${ticket.timestamp}`, v);
-            }
-            // Key 3: gameId + parsedDate timestamp (fallback)
-            if (ticket.gameId && ticket.parsedDate) {
-                map.set(`${ticket.gameId}|${ticket.parsedDate.getTime()}`, v);
+            const ticketNumber = v.ticket?.ticketNumber;
+            if (ticketNumber) {
+                map.set(ticketNumber, v);
             }
         });
         
@@ -392,26 +384,10 @@ window.EntriesPage = (function() {
         cachedValidationMap = null;
     }
     
-    // Helper function to find validation for an entry
+    // Helper function to find validation for an entry - simple lookup by ticketNumber
     function findValidationForEntry(entry, validationMap) {
-        if (!validationMap) return null;
-        
-        // Try ticketNumber first
-        if (entry.ticketNumber) {
-            const v = validationMap.get(entry.ticketNumber);
-            if (v) return v;
-        }
-        // Try composite key (gameId + timestamp)
-        if (entry.gameId && entry.timestamp) {
-            const v = validationMap.get(`${entry.gameId}|${entry.timestamp}`);
-            if (v) return v;
-        }
-        // Try date-based key (gameId + parsedDate)
-        if (entry.gameId && entry.parsedDate) {
-            const v = validationMap.get(`${entry.gameId}|${entry.parsedDate.getTime()}`);
-            if (v) return v;
-        }
-        return null;
+        if (!validationMap || !entry.ticketNumber) return null;
+        return validationMap.get(entry.ticketNumber) || null;
     }
     
     function renderTable() {
