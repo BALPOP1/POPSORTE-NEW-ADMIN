@@ -243,12 +243,15 @@ window.ResultsPage = (function() {
     // Event Handlers
     // ============================================
     
+    // Debounced search function (300ms delay)
+    const debouncedApplySearch = AdminCore.debounce(applySearch, 300);
+    
     function bindEvents() {
         const searchInput = document.getElementById('searchResults');
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
                 searchTerm = e.target.value;
-                applySearch();
+                debouncedApplySearch();
             });
         }
     }

@@ -312,12 +312,21 @@ window.RechargeValidator = (function() {
     }
 
     /**
-     * Validate all tickets
+     * Validate all tickets with caching
      * @param {Object[]} entries - All entry objects
      * @param {Object[]} recharges - All recharge objects
      * @returns {Object} Validation results with statistics
      */
     async function validateAllTickets(entries, recharges) {
+        // Check cache first
+        const cached = DataFetcher.getCachedValidation();
+        if (cached && cached.stats.total === entries.length) {
+            console.log('Using cached validation results');
+            return cached;
+        }
+        
+        console.log('Computing validation results...');
+        
         // Group recharges by game ID
         const rechargesByGameId = {};
         recharges.forEach(r => {
@@ -348,31 +357,47 @@ window.RechargeValidator = (function() {
             cutoff: 0
         };
         
-        for (const entry of entries) {
-            const validation = validateTicket(entry, rechargesByGameId, ticketsByGameId);
-            results.push(validation);
+        // Process in batches to avoid blocking UI
+        const batchSize = 100;
+        for (let i = 0; i < entries.length; i += batchSize) {
+            const batch = entries.slice(i, i + batchSize);
             
-            switch (validation.status) {
-                case ValidationStatus.VALID:
-                    stats.valid++;
-                    break;
-                case ValidationStatus.INVALID:
-                    stats.invalid++;
-                    break;
-                default:
-                    stats.unknown++;
+            for (const entry of batch) {
+                const validation = validateTicket(entry, rechargesByGameId, ticketsByGameId);
+                results.push(validation);
+                
+                switch (validation.status) {
+                    case ValidationStatus.VALID:
+                        stats.valid++;
+                        break;
+                    case ValidationStatus.INVALID:
+                        stats.invalid++;
+                        break;
+                    default:
+                        stats.unknown++;
+                }
+                
+                if (validation.isCutoff) {
+                    stats.cutoff++;
+                }
             }
             
-            if (validation.isCutoff) {
-                stats.cutoff++;
+            // Yield to main thread after each batch
+            if (i + batchSize < entries.length) {
+                await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
         
-        return {
+        const result = {
             results,
             stats,
             rechargeCount: recharges.length
         };
+        
+        // Cache the results
+        DataFetcher.setCachedValidation(result);
+        
+        return result;
     }
 
     // ============================================

@@ -690,18 +690,22 @@ window.EntriesPage = (function() {
     // Event Handlers
     // ============================================
     
+    // Debounced filter function for text inputs (300ms delay)
+    const debouncedApplyFilters = AdminCore.debounce(applyFilters, 300);
+    
     function bindEvents() {
-        // Filter inputs
+        // Filter inputs with debouncing for text fields
         document.getElementById('filterGameId')?.addEventListener('input', (e) => {
             filters.gameId = e.target.value;
-            applyFilters();
+            debouncedApplyFilters();
         });
         
         document.getElementById('filterWhatsapp')?.addEventListener('input', (e) => {
             filters.whatsapp = e.target.value;
-            applyFilters();
+            debouncedApplyFilters();
         });
         
+        // Dropdown filters apply immediately
         document.getElementById('filterContest')?.addEventListener('change', (e) => {
             filters.contest = e.target.value;
             applyFilters();

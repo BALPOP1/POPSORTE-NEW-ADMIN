@@ -173,12 +173,23 @@ window.WinnerCalculator = (function() {
     }
 
     /**
-     * Calculate winners for all contests
+     * Calculate winners for all contests with caching
      * @param {Object[]} entries - All entries
      * @param {Object[]} results - All results
      * @returns {Object} Complete winners calculation
      */
     async function calculateAllWinners(entries, results) {
+        // Check cache first
+        if (DataFetcher.isWinnersCacheValid(entries, results)) {
+            const cached = DataFetcher.getCachedWinners();
+            if (cached) {
+                console.log('Using cached winner calculations');
+                return cached;
+            }
+        }
+        
+        console.log('Computing winner calculations...');
+        
         // Group entries by contest
         const entriesByContest = DataFetcher.groupEntriesByContest(entries);
         
@@ -201,28 +212,41 @@ window.WinnerCalculator = (function() {
             totalPrizeAwarded: 0
         };
         
-        for (const [contest, contestEntries] of Object.entries(entriesByContest)) {
-            const result = resultsMap.get(contest);
-            const contestWinners = calculateContestWinners(contestEntries, result);
+        const contestKeys = Object.keys(entriesByContest);
+        const batchSize = 10;
+        
+        for (let i = 0; i < contestKeys.length; i += batchSize) {
+            const batch = contestKeys.slice(i, i + batchSize);
             
-            contestResults.push(contestWinners);
+            for (const contest of batch) {
+                const contestEntries = entriesByContest[contest];
+                const result = resultsMap.get(contest);
+                const contestWinners = calculateContestWinners(contestEntries, result);
+                
+                contestResults.push(contestWinners);
+                
+                if (contestWinners.hasResult) {
+                    stats.totalContests++;
+                    
+                    if (contestWinners.winningTier > 0) {
+                        stats.contestsWithWinners++;
+                        stats.totalPrizeAwarded += PRIZE_POOL;
+                    }
+                    
+                    // Count by tier (only valid entries)
+                    for (let tier = 5; tier >= 1; tier--) {
+                        const validInTier = contestWinners.byTier[tier].filter(w => w.isValidEntry);
+                        stats.byTier[tier] += validInTier.length;
+                    }
+                    
+                    // Add winners to all winners list
+                    allWinners.push(...contestWinners.winners);
+                }
+            }
             
-            if (contestWinners.hasResult) {
-                stats.totalContests++;
-                
-                if (contestWinners.winningTier > 0) {
-                    stats.contestsWithWinners++;
-                    stats.totalPrizeAwarded += PRIZE_POOL;
-                }
-                
-                // Count by tier (only valid entries)
-                for (let tier = 5; tier >= 1; tier--) {
-                    const validInTier = contestWinners.byTier[tier].filter(w => w.isValidEntry);
-                    stats.byTier[tier] += validInTier.length;
-                }
-                
-                // Add winners to all winners list
-                allWinners.push(...contestWinners.winners);
+            // Yield to main thread after each batch
+            if (i + batchSize < contestKeys.length) {
+                await new Promise(resolve => setTimeout(resolve, 0));
             }
         }
         
@@ -235,11 +259,20 @@ window.WinnerCalculator = (function() {
             return numB - numA;
         });
         
-        return {
+        const result = {
             contestResults,
             allWinners,
             stats
         };
+        
+        // Cache the results
+        DataFetcher.setCachedWinners(
+            result,
+            DataFetcher.simpleHash(entries),
+            DataFetcher.simpleHash(results)
+        );
+        
+        return result;
     }
 
     // ============================================

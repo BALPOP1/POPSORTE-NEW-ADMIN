@@ -42,8 +42,75 @@ window.DataFetcher = (function() {
     // ============================================
     const cache = {
         entries: { data: null, timestamp: 0 },
-        recharges: { data: null, timestamp: 0 }
+        recharges: { data: null, timestamp: 0 },
+        // Processed data cache - cleared when raw data changes
+        validation: { data: null, entriesHash: null },
+        winners: { data: null, entriesHash: null, resultsHash: null }
     };
+
+    /**
+     * Generate simple hash for cache invalidation
+     * @param {Object[]} data - Data array to hash
+     * @returns {string} Simple hash
+     */
+    function simpleHash(data) {
+        if (!data) return '';
+        return `${data.length}-${data[0]?.ticketNumber || data[0]?.contest || ''}-${data[data.length - 1]?.ticketNumber || data[data.length - 1]?.contest || ''}`;
+    }
+
+    /**
+     * Get cached validation results
+     * @returns {Object|null} Cached validation or null
+     */
+    function getCachedValidation() {
+        if (!cache.entries.data || !cache.validation.data) return null;
+        const currentHash = simpleHash(cache.entries.data);
+        if (cache.validation.entriesHash === currentHash) {
+            return cache.validation.data;
+        }
+        return null;
+    }
+
+    /**
+     * Set cached validation results
+     * @param {Object} data - Validation results
+     */
+    function setCachedValidation(data) {
+        cache.validation = {
+            data: data,
+            entriesHash: simpleHash(cache.entries.data)
+        };
+    }
+
+    /**
+     * Get cached winner calculations
+     * @returns {Object|null} Cached winners or null
+     */
+    function getCachedWinners() {
+        return cache.winners.data;
+    }
+
+    /**
+     * Set cached winner calculations
+     * @param {Object} data - Winner calculation results
+     * @param {string} entriesHash - Hash of entries data
+     * @param {string} resultsHash - Hash of results data
+     */
+    function setCachedWinners(data, entriesHash, resultsHash) {
+        cache.winners = { data, entriesHash, resultsHash };
+    }
+
+    /**
+     * Check if winner cache is valid
+     * @param {Object[]} entries - Current entries
+     * @param {Object[]} results - Current results
+     * @returns {boolean} True if cache is valid
+     */
+    function isWinnersCacheValid(entries, results) {
+        if (!cache.winners.data) return false;
+        return cache.winners.entriesHash === simpleHash(entries) &&
+               cache.winners.resultsHash === simpleHash(results);
+    }
 
     // ============================================
     // Generic Fetch Helper
@@ -415,6 +482,8 @@ window.DataFetcher = (function() {
     function clearCache() {
         cache.entries = { data: null, timestamp: 0 };
         cache.recharges = { data: null, timestamp: 0 };
+        cache.validation = { data: null, entriesHash: null };
+        cache.winners = { data: null, entriesHash: null, resultsHash: null };
     }
 
     /**
@@ -480,6 +549,14 @@ window.DataFetcher = (function() {
         // Cache management
         clearCache,
         getCacheStatus,
+        
+        // Processed data cache
+        getCachedValidation,
+        setCachedValidation,
+        getCachedWinners,
+        setCachedWinners,
+        isWinnersCacheValid,
+        simpleHash,
         
         // Constants
         CACHE_TTL

@@ -21,21 +21,21 @@ window.AdminCharts = (function() {
     const chartInstances = {};
 
     // ============================================
-    // Color Palette
+    // Color Palette (Dark Theme)
     // ============================================
     const colors = {
-        primary: '#2563eb',
-        primaryLight: 'rgba(37, 99, 235, 0.1)',
+        primary: '#06b6d4',
+        primaryLight: 'rgba(6, 182, 212, 0.15)',
         success: '#10b981',
-        successLight: 'rgba(16, 185, 129, 0.1)',
+        successLight: 'rgba(16, 185, 129, 0.15)',
         warning: '#f59e0b',
-        warningLight: 'rgba(245, 158, 11, 0.1)',
+        warningLight: 'rgba(245, 158, 11, 0.15)',
         danger: '#ef4444',
-        dangerLight: 'rgba(239, 68, 68, 0.1)',
+        dangerLight: 'rgba(239, 68, 68, 0.15)',
         info: '#3b82f6',
-        infoLight: 'rgba(59, 130, 246, 0.1)',
-        gray: '#6b7280',
-        grayLight: 'rgba(107, 114, 128, 0.1)'
+        infoLight: 'rgba(59, 130, 246, 0.15)',
+        gray: '#64748b',
+        grayLight: 'rgba(100, 116, 139, 0.15)'
     };
 
     // ============================================
@@ -51,6 +51,7 @@ window.AdminCharts = (function() {
                 labels: {
                     usePointStyle: true,
                     padding: 20,
+                    color: '#94a3b8',
                     font: {
                         family: "'Inter', sans-serif",
                         size: 12
@@ -58,7 +59,11 @@ window.AdminCharts = (function() {
                 }
             },
             tooltip: {
-                backgroundColor: '#1f2937',
+                backgroundColor: '#1e1e2a',
+                borderColor: '#3a3a4a',
+                borderWidth: 1,
+                titleColor: '#f1f5f9',
+                bodyColor: '#94a3b8',
                 titleFont: {
                     family: "'Inter', sans-serif",
                     size: 13,
@@ -79,6 +84,7 @@ window.AdminCharts = (function() {
                     display: false
                 },
                 ticks: {
+                    color: '#94a3b8',
                     font: {
                         family: "'Inter', sans-serif",
                         size: 11
@@ -88,9 +94,10 @@ window.AdminCharts = (function() {
             y: {
                 beginAtZero: true,
                 grid: {
-                    color: 'rgba(0, 0, 0, 0.05)'
+                    color: 'rgba(255, 255, 255, 0.05)'
                 },
                 ticks: {
+                    color: '#94a3b8',
                     font: {
                         family: "'Inter', sans-serif",
                         size: 11
@@ -123,8 +130,20 @@ window.AdminCharts = (function() {
      * @returns {Chart} Chart instance
      */
     function createChart(chartId, canvas, config) {
-        destroyChart(chartId);
+        // Try to update existing chart instead of recreating
+        if (chartInstances[chartId]) {
+            const existingChart = chartInstances[chartId];
+            
+            // Update data
+            existingChart.data.labels = config.data.labels;
+            existingChart.data.datasets = config.data.datasets;
+            
+            // Update with animation disabled for smoother updates
+            existingChart.update('none');
+            return existingChart;
+        }
         
+        // Create new chart
         const ctx = canvas.getContext('2d');
         chartInstances[chartId] = new Chart(ctx, config);
         return chartInstances[chartId];

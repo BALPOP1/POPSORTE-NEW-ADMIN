@@ -21,7 +21,7 @@ window.AdminCore = (function() {
     // ============================================
     const SESSION_KEY = 'popsorte_admin_session';
     const SESSION_TTL = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
-    const REFRESH_INTERVAL = 60 * 1000; // 60 seconds
+    const REFRESH_INTERVAL = 120 * 1000; // 120 seconds (reduced frequency for performance)
     const VALID_PAGES = ['dashboard', 'entries', 'results', 'winners'];
     const DEFAULT_PAGE = 'dashboard';
 
@@ -291,6 +291,57 @@ window.AdminCore = (function() {
         const toast = document.getElementById('toast');
         if (toast) {
             toast.className = 'toast';
+        }
+    }
+
+    // ============================================
+    // Performance Utilities
+    // ============================================
+    
+    /**
+     * Debounce function - delays execution until after wait ms have elapsed
+     * @param {Function} func - Function to debounce
+     * @param {number} wait - Wait time in milliseconds
+     * @returns {Function} Debounced function
+     */
+    function debounce(func, wait = 300) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+
+    /**
+     * Throttle function - limits execution to once per wait ms
+     * @param {Function} func - Function to throttle
+     * @param {number} wait - Wait time in milliseconds
+     * @returns {Function} Throttled function
+     */
+    function throttle(func, wait = 100) {
+        let inThrottle;
+        return function executedFunction(...args) {
+            if (!inThrottle) {
+                func(...args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, wait);
+            }
+        };
+    }
+
+    /**
+     * Request idle callback with fallback for Safari
+     * @param {Function} callback - Function to execute during idle time
+     */
+    function requestIdleExecution(callback) {
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(callback, { timeout: 2000 });
+        } else {
+            setTimeout(callback, 1);
         }
     }
 
@@ -678,6 +729,11 @@ window.AdminCore = (function() {
         detectDelimiter,
         maskWhatsApp,
         getBallColorClass,
+        
+        // Performance utilities
+        debounce,
+        throttle,
+        requestIdleExecution,
         
         // Constants
         VALID_PAGES,

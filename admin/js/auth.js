@@ -203,8 +203,7 @@ window.AdminAuth = (function() {
         if (el) {
             el.textContent = '';
             el.classList.remove('show');
-        }
-    }
+        }    }
 
     // ============================================
     // Logout Handler
