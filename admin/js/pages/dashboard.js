@@ -28,6 +28,7 @@ window.DashboardPage = (function() {
         recharges: [],
         results: []
     };
+    let cachedDailyData = null; // Cache for engagement analysis
 
     // ============================================
     // HTML Templates
@@ -316,12 +317,15 @@ window.DashboardPage = (function() {
      * @param {string} metric - Selected metric
      */
     function renderLast7DaysChart(metric = 'all') {
-        const { entries, recharges } = currentData;
-        const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
+        // Use cached data or calculate if not available
+        if (!cachedDailyData) {
+            const { entries, recharges } = currentData;
+            cachedDailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
+        }
         
         const canvas = document.getElementById('chartLast7Days');
         if (canvas) {
-            AdminCharts.createLast7DaysChart(canvas, dailyData, metric);
+            AdminCharts.createLast7DaysChart(canvas, cachedDailyData, metric);
         }
     }
 
@@ -329,8 +333,13 @@ window.DashboardPage = (function() {
      * Render recharge vs tickets table
      */
     function renderRechargeVsTicketsTable() {
-        const { entries, recharges } = currentData;
-        const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
+        const { recharges } = currentData;
+        // Use cached data or calculate if not available
+        if (!cachedDailyData) {
+            const { entries } = currentData;
+            cachedDailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
+        }
+        const dailyData = cachedDailyData;
         
         const tbody = document.getElementById('rechargeVsTicketsBody');
         if (!tbody) return;
@@ -552,62 +561,33 @@ window.DashboardPage = (function() {
     // ============================================
     
     /**
-     * Load all dashboard data with progressive loading
+     * Load all dashboard data
      */
     async function loadData() {
         try {
-            AdminCore.showLoading('Fetching entries...');
-            AdminCore.updateLoadingProgress(10);
+            // Fetch all data in parallel - use cached if available
+            const [entries, results, recharges] = await Promise.all([
+                DataFetcher.fetchEntries(),
+                ResultsFetcher.fetchResults(),
+                DataFetcher.fetchRecharges().catch(() => [])
+            ]);
             
-            // Fetch entries first (most important)
-            const entries = await DataFetcher.fetchEntries();
-            AdminCore.updateLoadingProgress(40, 'Fetching results...');
-            
-            // Fetch results
-            const results = await ResultsFetcher.fetchResults();
-            AdminCore.updateLoadingProgress(60, 'Fetching recharges...');
-            
-            // Fetch recharges (can fail gracefully)
-            let recharges = [];
-            try {
-                recharges = await DataFetcher.fetchRecharges();
-            } catch (e) {
-                console.warn('Could not fetch recharges:', e);
-            }
-            
-            AdminCore.updateLoadingProgress(80, 'Processing data...');
             currentData = { entries, recharges, results };
+            cachedDailyData = null; // Clear cache when data changes
             
-            // Render critical sections first
+            // Render all sections
             renderAllTimeStats();
             renderLatestEntries();
-            
-            AdminCore.updateLoadingProgress(90, 'Rendering charts...');
-            
-            // Defer non-critical renders
-            await new Promise(resolve => setTimeout(resolve, 10));
-            
             renderEngagementOverview();
             renderRechargeVsTicketsTable();
-            
-            await new Promise(resolve => setTimeout(resolve, 10));
-            
             renderLast7DaysChart('all');
-            
-            AdminCore.updateLoadingProgress(95, 'Loading winners...');
-            await new Promise(resolve => setTimeout(resolve, 10));
-            
             renderWinnersStats();
             renderWinnersByContest();
             renderTopEntrants();
             
-            AdminCore.updateLoadingProgress(100);
-            AdminCore.hideLoading();
-            
         } catch (error) {
             console.error('Error loading dashboard data:', error);
-            AdminCore.hideLoading();
-            AdminCore.showToast('Error loading data: ' + error.message, 'error');
+            AdminCore.showToast('Error loading data', 'error');
         }
     }
 

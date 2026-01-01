@@ -31,7 +31,6 @@ window.AdminCore = (function() {
     let currentPage = null;
     let refreshTimer = null;
     let isRefreshing = false;
-    let isPageLoading = false;
     const eventListeners = {};
 
     // ============================================
@@ -300,11 +299,10 @@ window.AdminCore = (function() {
     // ============================================
     
     /**
-     * Show loading overlay
+     * Show loading overlay (only for initial load)
      * @param {string} text - Loading message
      */
     function showLoading(text = 'Loading data...') {
-        isPageLoading = true;
         const overlay = document.getElementById('loadingOverlay');
         const textEl = document.getElementById('loadingText');
         const progressEl = document.getElementById('loadingProgress');
@@ -341,15 +339,6 @@ window.AdminCore = (function() {
         if (overlay) {
             overlay.classList.add('hidden');
         }
-        isPageLoading = false;
-    }
-
-    /**
-     * Set page loading state (blocks auto-refresh)
-     * @param {boolean} loading - Whether page is loading
-     */
-    function setPageLoading(loading) {
-        isPageLoading = loading;
     }
 
     // ============================================
@@ -567,11 +556,8 @@ window.AdminCore = (function() {
      * Trigger data refresh
      */
     async function refreshData() {
-        // Skip refresh if page is loading or already refreshing
-        if (isRefreshing || isPageLoading) {
-            console.log('Skipping auto-refresh - page is loading or already refreshing');
-            return;
-        }
+        // Skip refresh if already refreshing
+        if (isRefreshing) return;
         
         isRefreshing = true;
         const refreshBtn = document.getElementById('refreshBtn');
@@ -766,6 +752,7 @@ window.AdminCore = (function() {
         
         // Router
         navigateTo,
+        initRouter,
         getCurrentPage: () => currentPage,
         
         // UI
@@ -778,7 +765,6 @@ window.AdminCore = (function() {
         showLoading,
         updateLoadingProgress,
         hideLoading,
-        setPageLoading,
         
         // Refresh
         refreshData,

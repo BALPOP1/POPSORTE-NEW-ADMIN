@@ -159,8 +159,9 @@ window.AdminAuth = (function() {
                 // Show app
                 AdminCore.showApp();
                 
-                // Initialize router and refresh
-                window.location.hash = AdminCore.DEFAULT_PAGE;
+                // Initialize router first, then navigate
+                AdminCore.initRouter();
+                AdminCore.navigateTo(AdminCore.DEFAULT_PAGE);
                 AdminCore.startAutoRefresh();
                 
                 // Emit login event

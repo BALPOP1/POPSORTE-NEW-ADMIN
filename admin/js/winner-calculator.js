@@ -213,40 +213,31 @@ window.WinnerCalculator = (function() {
         };
         
         const contestKeys = Object.keys(entriesByContest);
-        const batchSize = 10;
         
-        for (let i = 0; i < contestKeys.length; i += batchSize) {
-            const batch = contestKeys.slice(i, i + batchSize);
+        // Process all contests synchronously for speed
+        for (const contest of contestKeys) {
+            const contestEntries = entriesByContest[contest];
+            const result = resultsMap.get(contest);
+            const contestWinners = calculateContestWinners(contestEntries, result);
             
-            for (const contest of batch) {
-                const contestEntries = entriesByContest[contest];
-                const result = resultsMap.get(contest);
-                const contestWinners = calculateContestWinners(contestEntries, result);
+            contestResults.push(contestWinners);
+            
+            if (contestWinners.hasResult) {
+                stats.totalContests++;
                 
-                contestResults.push(contestWinners);
-                
-                if (contestWinners.hasResult) {
-                    stats.totalContests++;
-                    
-                    if (contestWinners.winningTier > 0) {
-                        stats.contestsWithWinners++;
-                        stats.totalPrizeAwarded += PRIZE_POOL;
-                    }
-                    
-                    // Count by tier (only valid entries)
-                    for (let tier = 5; tier >= 1; tier--) {
-                        const validInTier = contestWinners.byTier[tier].filter(w => w.isValidEntry);
-                        stats.byTier[tier] += validInTier.length;
-                    }
-                    
-                    // Add winners to all winners list
-                    allWinners.push(...contestWinners.winners);
+                if (contestWinners.winningTier > 0) {
+                    stats.contestsWithWinners++;
+                    stats.totalPrizeAwarded += PRIZE_POOL;
                 }
-            }
-            
-            // Yield to main thread after each batch for UI responsiveness
-            if (i + batchSize < contestKeys.length) {
-                await new Promise(resolve => setTimeout(resolve, 5));
+                
+                // Count by tier (only valid entries)
+                for (let tier = 5; tier >= 1; tier--) {
+                    const validInTier = contestWinners.byTier[tier].filter(w => w.isValidEntry);
+                    stats.byTier[tier] += validInTier.length;
+                }
+                
+                // Add winners to all winners list
+                allWinners.push(...contestWinners.winners);
             }
         }
         

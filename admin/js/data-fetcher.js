@@ -53,12 +53,6 @@ window.DataFetcher = (function() {
         winners: { data: null, entriesHash: null, resultsHash: null }
     };
 
-    // Fetch lock to prevent simultaneous requests
-    const fetchLock = {
-        entries: false,
-        recharges: false
-    };
-
     /**
      * Generate simple hash for cache invalidation
      * @param {Object[]} data - Data array to hash
@@ -215,31 +209,12 @@ window.DataFetcher = (function() {
             return cache.entries.data;
         }
 
-        // Return cached data if fetch is in progress
-        if (fetchLock.entries) {
-            console.log('Entries fetch already in progress, using cached data');
-            if (cache.entries.data) return cache.entries.data;
-            // Wait for current fetch to complete
-            await new Promise(resolve => {
-                const checkInterval = setInterval(() => {
-                    if (!fetchLock.entries) {
-                        clearInterval(checkInterval);
-                        resolve();
-                    }
-                }, 100);
-            });
-            return cache.entries.data || [];
-        }
-
-        fetchLock.entries = true;
-
         try {
             const csvText = await fetchCSV(ENTRIES_SHEET_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
 
             if (lines.length <= 1) {
                 cache.entries = { data: [], timestamp: now };
-                fetchLock.entries = false;
                 return [];
             }
 
@@ -261,12 +236,10 @@ window.DataFetcher = (function() {
             });
 
             cache.entries = { data: entries, timestamp: now };
-            fetchLock.entries = false;
             return entries;
 
         } catch (error) {
             console.error('Error fetching entries:', error);
-            fetchLock.entries = false;
             // Return cached data if available, even if stale
             if (cache.entries.data) {
                 return cache.entries.data;
@@ -372,56 +345,25 @@ window.DataFetcher = (function() {
             return cache.recharges.data;
         }
 
-        // Return cached data if fetch is in progress
-        if (fetchLock.recharges) {
-            console.log('Recharges fetch already in progress, using cached data');
-            if (cache.recharges.data) return cache.recharges.data;
-            // Wait for current fetch to complete
-            await new Promise(resolve => {
-                const checkInterval = setInterval(() => {
-                    if (!fetchLock.recharges) {
-                        clearInterval(checkInterval);
-                        resolve();
-                    }
-                }, 100);
-            });
-            return cache.recharges.data || [];
-        }
-
-        fetchLock.recharges = true;
-
         try {
             const csvText = await fetchCSV(RECHARGE_SHEET_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
-
-            console.log(`Recharge sheet: ${lines.length} lines loaded`);
             
             if (lines.length <= 1) {
-                console.warn('Recharge sheet has no data rows');
                 cache.recharges = { data: [], timestamp: now };
-                fetchLock.recharges = false;
                 return [];
             }
 
-            // Log first few lines for debugging
-            console.log('Recharge sheet header:', lines[0]);
-            if (lines[1]) console.log('Recharge sheet first row:', lines[1]);
-
             const delimiter = AdminCore.detectDelimiter(lines[0]);
             const recharges = [];
-            let skippedRows = 0;
 
             for (let i = 1; i < lines.length; i++) {
                 const row = AdminCore.parseCSVLine(lines[i], delimiter);
                 const recharge = parseRechargeRow(row);
                 if (recharge) {
                     recharges.push(recharge);
-                } else {
-                    skippedRows++;
                 }
             }
-
-            console.log(`Recharges parsed: ${recharges.length} valid, ${skippedRows} skipped`);
 
             // Sort by timestamp descending
             recharges.sort((a, b) => {
@@ -431,12 +373,10 @@ window.DataFetcher = (function() {
             });
 
             cache.recharges = { data: recharges, timestamp: now };
-            fetchLock.recharges = false;
             return recharges;
 
         } catch (error) {
             console.error('Error fetching recharges:', error);
-            fetchLock.recharges = false;
             if (cache.recharges.data) {
                 return cache.recharges.data;
             }

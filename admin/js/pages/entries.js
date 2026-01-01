@@ -665,26 +665,14 @@ window.EntriesPage = (function() {
     
     async function loadData() {
         try {
-            AdminCore.showLoading('Fetching entries...');
-            AdminCore.updateLoadingProgress(20);
-            
-            const entries = await DataFetcher.fetchEntries();
-            
-            AdminCore.updateLoadingProgress(50, 'Fetching recharges...');
-            
-            let recharges = [];
-            try {
-                recharges = await DataFetcher.fetchRecharges();
-            } catch (e) {
-                console.warn('Could not fetch recharges:', e);
-            }
-            
-            AdminCore.updateLoadingProgress(70, 'Validating tickets...');
+            // Fetch data in parallel
+            const [entries, recharges] = await Promise.all([
+                DataFetcher.fetchEntries(),
+                DataFetcher.fetchRecharges().catch(() => [])
+            ]);
             
             // Validate all tickets
             const validationResults = await RechargeValidator.validateAllTickets(entries, recharges);
-            
-            AdminCore.updateLoadingProgress(90, 'Rendering...');
             
             currentData = { entries, recharges, validationResults };
             filteredEntries = [...entries];
@@ -694,12 +682,9 @@ window.EntriesPage = (function() {
             renderFilterOptions();
             applyFilters();
             
-            AdminCore.hideLoading();
-            
         } catch (error) {
             console.error('Error loading entries data:', error);
-            AdminCore.hideLoading();
-            AdminCore.showToast('Error loading entries: ' + error.message, 'error');
+            AdminCore.showToast('Error loading entries', 'error');
         }
     }
 
