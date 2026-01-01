@@ -38,6 +38,8 @@ window.EntriesPage = (function() {
         validity: 'all',
         cutoff: 'all'
     };
+    let cachedValidationMap = null; // Cache validation map
+    let isFiltering = false; // Prevent concurrent filtering
 
     // ============================================
     // HTML Templates
@@ -167,75 +169,107 @@ window.EntriesPage = (function() {
     // Filter Functions
     // ============================================
     
-    function applyFilters() {
-        let result = [...currentData.entries];
-        
-        // Get validation results map
-        const validationMap = new Map();
-        if (currentData.validationResults) {
-            currentData.validationResults.results.forEach(v => {
-                validationMap.set(v.ticket.ticketNumber, v);
-            });
+    // Async filtering with batching to prevent UI blocking
+    async function applyFilters() {
+        // Prevent concurrent filtering
+        if (isFiltering) {
+            return;
         }
+        isFiltering = true;
         
-        // Game ID filter
-        if (filters.gameId) {
-            const term = filters.gameId.toLowerCase();
-            result = result.filter(e => e.gameId.toLowerCase().includes(term));
-        }
-        
-        // WhatsApp filter
-        if (filters.whatsapp) {
-            const term = filters.whatsapp.toLowerCase();
-            result = result.filter(e => (e.whatsapp || '').toLowerCase().includes(term));
-        }
-        
-        // Contest filter
-        if (filters.contest) {
-            result = result.filter(e => e.contest === filters.contest);
-        }
-        
-        // Draw date filter
-        if (filters.drawDate) {
-            result = result.filter(e => e.drawDate === filters.drawDate);
-        }
-        
-        // Validity filter
-        if (filters.validity !== 'all') {
-            result = result.filter(e => {
-                const validation = validationMap.get(e.ticketNumber);
-                const status = validation?.status || 'UNKNOWN';
+        try {
+            let result = [...currentData.entries];
+            
+            // Build validation map once (cached)
+            const validationMap = buildValidationMap();
+            
+            // Apply simple filters first (fast)
+            if (filters.gameId) {
+                const term = filters.gameId.toLowerCase();
+                result = result.filter(e => e.gameId.toLowerCase().includes(term));
+            }
+            
+            if (filters.whatsapp) {
+                const term = filters.whatsapp.toLowerCase();
+                result = result.filter(e => (e.whatsapp || '').toLowerCase().includes(term));
+            }
+            
+            if (filters.contest) {
+                result = result.filter(e => e.contest === filters.contest);
+            }
+            
+            if (filters.drawDate) {
+                result = result.filter(e => e.drawDate === filters.drawDate);
+            }
+            
+            // Apply validation-based filters with batching (slower, needs to be async)
+            if (filters.validity !== 'all') {
+                const batchSize = 500;
+                const filtered = [];
                 
-                switch (filters.validity) {
-                    case 'valid':
-                        return status === 'VALID';
-                    case 'invalid':
-                        return status === 'INVALID';
-                    case 'unknown':
-                        return status === 'UNKNOWN';
-                    default:
-                        return true;
+                for (let i = 0; i < result.length; i += batchSize) {
+                    const batch = result.slice(i, i + batchSize);
+                    const batchFiltered = batch.filter(e => {
+                        const validation = findValidationForEntry(e, validationMap);
+                        const status = validation?.status || 'UNKNOWN';
+                        
+                        switch (filters.validity) {
+                            case 'valid':
+                                return status === 'VALID';
+                            case 'invalid':
+                                return status === 'INVALID';
+                            case 'unknown':
+                                return status === 'UNKNOWN';
+                            default:
+                                return true;
+                        }
+                    });
+                    
+                    filtered.push(...batchFiltered);
+                    
+                    // Yield to UI after each batch
+                    if (i + batchSize < result.length) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
                 }
-            });
-        }
-        
-        // Cutoff filter
-        if (filters.cutoff !== 'all') {
-            result = result.filter(e => {
-                const validation = validationMap.get(e.ticketNumber);
-                const isCutoff = validation?.isCutoff || false;
                 
-                return filters.cutoff === 'yes' ? isCutoff : !isCutoff;
-            });
+                result = filtered;
+            }
+            
+            // Apply cutoff filter with batching
+            if (filters.cutoff !== 'all') {
+                const batchSize = 500;
+                const filtered = [];
+                
+                for (let i = 0; i < result.length; i += batchSize) {
+                    const batch = result.slice(i, i + batchSize);
+                    const batchFiltered = batch.filter(e => {
+                        const validation = findValidationForEntry(e, validationMap);
+                        const isCutoff = validation?.isCutoff || false;
+                        return filters.cutoff === 'yes' ? isCutoff : !isCutoff;
+                    });
+                    
+                    filtered.push(...batchFiltered);
+                    
+                    // Yield to UI after each batch
+                    if (i + batchSize < result.length) {
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                }
+                
+                result = filtered;
+            }
+            
+            filteredEntries = result;
+            currentPage = 1;
+            renderTable();
+            renderPagination();
+        } finally {
+            isFiltering = false;
         }
-        
-        filteredEntries = result;
-        currentPage = 1;
-        renderTable();
-        renderPagination();
     }
 
-    function clearFilters() {
+    async function clearFilters() {
         filters = {
             gameId: '',
             whatsapp: '',
@@ -252,7 +286,7 @@ window.EntriesPage = (function() {
         document.getElementById('filterValidity').value = 'all';
         document.getElementById('filterCutoff').value = 'all';
         
-        applyFilters();
+        await applyFilters();
     }
 
     // ============================================
@@ -320,17 +354,72 @@ window.EntriesPage = (function() {
         }
     }
 
+    // Build comprehensive validation map with multiple keys (cached)
+    function buildValidationMap() {
+        // Return cached map if validation results haven't changed
+        if (cachedValidationMap && currentData.validationResults) {
+            return cachedValidationMap;
+        }
+        
+        const map = new Map();
+        if (!currentData.validationResults) {
+            cachedValidationMap = map;
+            return map;
+        }
+        
+        currentData.validationResults.results.forEach(v => {
+            const ticket = v.ticket;
+            // Key 1: ticketNumber (primary)
+            if (ticket.ticketNumber) {
+                map.set(ticket.ticketNumber, v);
+            }
+            // Key 2: gameId + timestamp (fallback)
+            if (ticket.gameId && ticket.timestamp) {
+                map.set(`${ticket.gameId}|${ticket.timestamp}`, v);
+            }
+            // Key 3: gameId + parsedDate timestamp (fallback)
+            if (ticket.gameId && ticket.parsedDate) {
+                map.set(`${ticket.gameId}|${ticket.parsedDate.getTime()}`, v);
+            }
+        });
+        
+        cachedValidationMap = map;
+        return map;
+    }
+    
+    // Clear validation map cache when data changes
+    function clearValidationMapCache() {
+        cachedValidationMap = null;
+    }
+    
+    // Helper function to find validation for an entry
+    function findValidationForEntry(entry, validationMap) {
+        if (!validationMap) return null;
+        
+        // Try ticketNumber first
+        if (entry.ticketNumber) {
+            const v = validationMap.get(entry.ticketNumber);
+            if (v) return v;
+        }
+        // Try composite key (gameId + timestamp)
+        if (entry.gameId && entry.timestamp) {
+            const v = validationMap.get(`${entry.gameId}|${entry.timestamp}`);
+            if (v) return v;
+        }
+        // Try date-based key (gameId + parsedDate)
+        if (entry.gameId && entry.parsedDate) {
+            const v = validationMap.get(`${entry.gameId}|${entry.parsedDate.getTime()}`);
+            if (v) return v;
+        }
+        return null;
+    }
+    
     function renderTable() {
         const tbody = document.getElementById('entriesTableBody');
         if (!tbody) return;
         
-        // Get validation results map
-        const validationMap = new Map();
-        if (currentData.validationResults) {
-            currentData.validationResults.results.forEach(v => {
-                validationMap.set(v.ticket.ticketNumber, v);
-            });
-        }
+        // Build validation map once
+        const validationMap = buildValidationMap();
         
         // Calculate pagination
         const start = (currentPage - 1) * perPage;
@@ -343,7 +432,7 @@ window.EntriesPage = (function() {
         }
         
         tbody.innerHTML = pageEntries.map(entry => {
-            const validation = validationMap.get(entry.ticketNumber);
+            const validation = findValidationForEntry(entry, validationMap);
             const status = validation?.status || 'UNKNOWN';
             const isCutoff = validation?.isCutoff || false;
             
@@ -450,14 +539,9 @@ window.EntriesPage = (function() {
         const entry = currentData.entries.find(e => e.ticketNumber === ticketNumber);
         if (!entry) return;
         
-        // Get validation
-        const validationMap = new Map();
-        if (currentData.validationResults) {
-            currentData.validationResults.results.forEach(v => {
-                validationMap.set(v.ticket.ticketNumber, v);
-            });
-        }
-        const validation = validationMap.get(ticketNumber);
+        // Get validation using the shared helper
+        const validationMap = buildValidationMap();
+        const validation = findValidationForEntry(entry, validationMap);
         
         const modalContent = document.getElementById('ticketModalContent');
         if (!modalContent) return;
@@ -587,16 +671,11 @@ window.EntriesPage = (function() {
             'Original Status'
         ];
         
-        // Get validation map
-        const validationMap = new Map();
-        if (currentData.validationResults) {
-            currentData.validationResults.results.forEach(v => {
-                validationMap.set(v.ticket.ticketNumber, v);
-            });
-        }
+        // Build validation map once
+        const validationMap = buildValidationMap();
         
         const rows = data.map(entry => {
-            const validation = validationMap.get(entry.ticketNumber);
+            const validation = findValidationForEntry(entry, validationMap);
             const status = validation?.status || 'UNKNOWN';
             
             return [
@@ -681,10 +760,13 @@ window.EntriesPage = (function() {
             currentData = { entries, recharges, validationResults };
             filteredEntries = [...entries];
             
+            // Clear validation map cache when data changes
+            clearValidationMapCache();
+            
             renderStats();
             renderValidationBanner();
             renderFilterOptions();
-            applyFilters();
+            await applyFilters();
             
         } catch (error) {
             console.error('Error loading entries data:', error);
