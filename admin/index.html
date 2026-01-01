@@ -135,7 +135,7 @@
                 <section id="page-winners" class="page">
                     <div class="page-loading">
                         <div class="spinner"></div>
-                        <p>Loading winners...</p>
+                        <p>Loading winners...</p> 
                     </div>
                 </section>
             </div>
@@ -144,6 +144,15 @@
 
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">Loading data...</div>
+        <div class="loading-progress">
+            <div class="loading-progress-bar" id="loadingProgress"></div>
+        </div>
+    </div>
 
     <!-- Ticket Details Modal -->
     <div id="ticketModal" class="modal-overlay" style="display:none;">

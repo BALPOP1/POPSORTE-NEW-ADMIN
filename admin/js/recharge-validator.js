@@ -357,8 +357,10 @@ window.RechargeValidator = (function() {
             cutoff: 0
         };
         
-        // Process in batches to avoid blocking UI
-        const batchSize = 100;
+        // Process in smaller batches to keep UI responsive
+        const batchSize = 50;
+        const totalBatches = Math.ceil(entries.length / batchSize);
+        
         for (let i = 0; i < entries.length; i += batchSize) {
             const batch = entries.slice(i, i + batchSize);
             
@@ -382,9 +384,9 @@ window.RechargeValidator = (function() {
                 }
             }
             
-            // Yield to main thread after each batch
+            // Yield to main thread after each batch - use longer delay for UI responsiveness
             if (i + batchSize < entries.length) {
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => setTimeout(resolve, 5));
             }
         }
         

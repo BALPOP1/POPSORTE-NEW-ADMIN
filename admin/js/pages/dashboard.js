@@ -552,31 +552,62 @@ window.DashboardPage = (function() {
     // ============================================
     
     /**
-     * Load all dashboard data
+     * Load all dashboard data with progressive loading
      */
     async function loadData() {
         try {
-            const [entries, recharges, results] = await Promise.all([
-                DataFetcher.fetchEntries(),
-                DataFetcher.fetchRecharges(),
-                ResultsFetcher.fetchResults()
-            ]);
+            AdminCore.showLoading('Fetching entries...');
+            AdminCore.updateLoadingProgress(10);
             
+            // Fetch entries first (most important)
+            const entries = await DataFetcher.fetchEntries();
+            AdminCore.updateLoadingProgress(40, 'Fetching results...');
+            
+            // Fetch results
+            const results = await ResultsFetcher.fetchResults();
+            AdminCore.updateLoadingProgress(60, 'Fetching recharges...');
+            
+            // Fetch recharges (can fail gracefully)
+            let recharges = [];
+            try {
+                recharges = await DataFetcher.fetchRecharges();
+            } catch (e) {
+                console.warn('Could not fetch recharges:', e);
+            }
+            
+            AdminCore.updateLoadingProgress(80, 'Processing data...');
             currentData = { entries, recharges, results };
             
-            // Render all sections
+            // Render critical sections first
             renderAllTimeStats();
-            renderWinnersStats();
+            renderLatestEntries();
+            
+            AdminCore.updateLoadingProgress(90, 'Rendering charts...');
+            
+            // Defer non-critical renders
+            await new Promise(resolve => setTimeout(resolve, 10));
+            
             renderEngagementOverview();
-            renderLast7DaysChart('all');
             renderRechargeVsTicketsTable();
+            
+            await new Promise(resolve => setTimeout(resolve, 10));
+            
+            renderLast7DaysChart('all');
+            
+            AdminCore.updateLoadingProgress(95, 'Loading winners...');
+            await new Promise(resolve => setTimeout(resolve, 10));
+            
+            renderWinnersStats();
             renderWinnersByContest();
             renderTopEntrants();
-            renderLatestEntries();
+            
+            AdminCore.updateLoadingProgress(100);
+            AdminCore.hideLoading();
             
         } catch (error) {
             console.error('Error loading dashboard data:', error);
-            AdminCore.showToast('Error loading dashboard data', 'error');
+            AdminCore.hideLoading();
+            AdminCore.showToast('Error loading data: ' + error.message, 'error');
         }
     }
 

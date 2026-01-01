@@ -425,13 +425,21 @@ window.WinnersPage = (function() {
     
     async function loadData() {
         try {
-            const [entries, results] = await Promise.all([
-                DataFetcher.fetchEntries(),
-                ResultsFetcher.fetchResults()
-            ]);
+            AdminCore.showLoading('Fetching data...');
+            AdminCore.updateLoadingProgress(20);
+            
+            const entries = await DataFetcher.fetchEntries();
+            
+            AdminCore.updateLoadingProgress(50, 'Fetching results...');
+            
+            const results = await ResultsFetcher.fetchResults();
+            
+            AdminCore.updateLoadingProgress(70, 'Calculating winners...');
             
             // Calculate all winners
             const calculation = await WinnerCalculator.calculateAllWinners(entries, results);
+            
+            AdminCore.updateLoadingProgress(90, 'Rendering...');
             
             currentData = { entries, results, calculation };
             allWinners = calculation.allWinners;
@@ -442,9 +450,12 @@ window.WinnersPage = (function() {
             renderFilterOptions();
             renderTable();
             
+            AdminCore.hideLoading();
+            
         } catch (error) {
             console.error('Error loading winners data:', error);
-            AdminCore.showToast('Error loading winners', 'error');
+            AdminCore.hideLoading();
+            AdminCore.showToast('Error loading winners: ' + error.message, 'error');
         }
     }
 

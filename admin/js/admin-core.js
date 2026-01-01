@@ -21,7 +21,7 @@ window.AdminCore = (function() {
     // ============================================
     const SESSION_KEY = 'popsorte_admin_session';
     const SESSION_TTL = 12 * 60 * 60 * 1000; // 12 hours in milliseconds
-    const REFRESH_INTERVAL = 120 * 1000; // 120 seconds (reduced frequency for performance)
+    const REFRESH_INTERVAL = 180 * 1000; // 3 minutes (extended for performance)
     const VALID_PAGES = ['dashboard', 'entries', 'results', 'winners'];
     const DEFAULT_PAGE = 'dashboard';
 
@@ -31,6 +31,7 @@ window.AdminCore = (function() {
     let currentPage = null;
     let refreshTimer = null;
     let isRefreshing = false;
+    let isPageLoading = false;
     const eventListeners = {};
 
     // ============================================
@@ -295,6 +296,63 @@ window.AdminCore = (function() {
     }
 
     // ============================================
+    // Loading Overlay
+    // ============================================
+    
+    /**
+     * Show loading overlay
+     * @param {string} text - Loading message
+     */
+    function showLoading(text = 'Loading data...') {
+        isPageLoading = true;
+        const overlay = document.getElementById('loadingOverlay');
+        const textEl = document.getElementById('loadingText');
+        const progressEl = document.getElementById('loadingProgress');
+        
+        if (overlay) {
+            overlay.classList.remove('hidden');
+            if (textEl) textEl.textContent = text;
+            if (progressEl) progressEl.style.width = '0%';
+        }
+    }
+
+    /**
+     * Update loading progress
+     * @param {number} percent - Progress percentage (0-100)
+     * @param {string} text - Optional new text
+     */
+    function updateLoadingProgress(percent, text) {
+        const progressEl = document.getElementById('loadingProgress');
+        const textEl = document.getElementById('loadingText');
+        
+        if (progressEl) {
+            progressEl.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+        }
+        if (text && textEl) {
+            textEl.textContent = text;
+        }
+    }
+
+    /**
+     * Hide loading overlay
+     */
+    function hideLoading() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            overlay.classList.add('hidden');
+        }
+        isPageLoading = false;
+    }
+
+    /**
+     * Set page loading state (blocks auto-refresh)
+     * @param {boolean} loading - Whether page is loading
+     */
+    function setPageLoading(loading) {
+        isPageLoading = loading;
+    }
+
+    // ============================================
     // Performance Utilities
     // ============================================
     
@@ -509,7 +567,11 @@ window.AdminCore = (function() {
      * Trigger data refresh
      */
     async function refreshData() {
-        if (isRefreshing) return;
+        // Skip refresh if page is loading or already refreshing
+        if (isRefreshing || isPageLoading) {
+            console.log('Skipping auto-refresh - page is loading or already refreshing');
+            return;
+        }
         
         isRefreshing = true;
         const refreshBtn = document.getElementById('refreshBtn');
@@ -713,6 +775,10 @@ window.AdminCore = (function() {
         hideToast,
         openModal,
         closeModal,
+        showLoading,
+        updateLoadingProgress,
+        hideLoading,
+        setPageLoading,
         
         // Refresh
         refreshData,

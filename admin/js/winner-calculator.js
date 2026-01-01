@@ -244,9 +244,9 @@ window.WinnerCalculator = (function() {
                 }
             }
             
-            // Yield to main thread after each batch
+            // Yield to main thread after each batch for UI responsiveness
             if (i + batchSize < contestKeys.length) {
-                await new Promise(resolve => setTimeout(resolve, 0));
+                await new Promise(resolve => setTimeout(resolve, 5));
             }
         }
         

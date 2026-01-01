@@ -24,9 +24,14 @@ window.ResultsFetcher = (function() {
     const RESULTS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1OttNYHiecAuGG6IRX7lW6lkG5ciEcL8gp3g6lNrN9H8/export?format=csv&gid=300277644';
 
     /**
-     * Cache TTL in milliseconds (60 seconds)
+     * Cache TTL in milliseconds (3 minutes - matches refresh interval)
      */
-    const CACHE_TTL = 60 * 1000;
+    const CACHE_TTL = 180 * 1000;
+
+    /**
+     * Fetch timeout in milliseconds
+     */
+    const FETCH_TIMEOUT = 15 * 1000;
 
     // ============================================
     // Cache Storage
@@ -35,32 +40,49 @@ window.ResultsFetcher = (function() {
         results: { data: null, timestamp: 0 }
     };
 
+    // Fetch lock to prevent simultaneous requests
+    let fetchLock = false;
+
     // ============================================
     // Fetch Helper
     // ============================================
     
     /**
-     * Fetch CSV data from Google Sheets
+     * Fetch CSV data from Google Sheets with timeout
      * @param {string} url - Sheet export URL
      * @returns {Promise<string>} Raw CSV text
      */
     async function fetchCSV(url) {
-        const response = await fetch(`${url}&t=${Date.now()}`, {
-            cache: 'no-store',
-            redirect: 'follow'
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+        
+        try {
+            const response = await fetch(`${url}&t=${Date.now()}`, {
+                cache: 'no-store',
+                redirect: 'follow',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const text = await response.text();
+
+            if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+                throw new Error('Sheet not publicly accessible');
+            }
+
+            return text;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timed out');
+            }
+            throw error;
         }
-
-        const text = await response.text();
-
-        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-            throw new Error('Sheet not publicly accessible');
-        }
-
-        return text;
     }
 
     // ============================================
@@ -144,12 +166,31 @@ window.ResultsFetcher = (function() {
             return cache.results.data;
         }
 
+        // Return cached data if fetch is in progress
+        if (fetchLock) {
+            console.log('Results fetch already in progress, using cached data');
+            if (cache.results.data) return cache.results.data;
+            // Wait for current fetch to complete
+            await new Promise(resolve => {
+                const checkInterval = setInterval(() => {
+                    if (!fetchLock) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
+            return cache.results.data || [];
+        }
+
+        fetchLock = true;
+
         try {
             const csvText = await fetchCSV(RESULTS_SHEET_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
 
             if (lines.length <= 1) {
                 cache.results = { data: [], timestamp: now };
+                fetchLock = false;
                 return [];
             }
 
@@ -172,10 +213,12 @@ window.ResultsFetcher = (function() {
             });
 
             cache.results = { data: results, timestamp: now };
+            fetchLock = false;
             return results;
 
         } catch (error) {
             console.error('Error fetching results:', error);
+            fetchLock = false;
             if (cache.results.data) {
                 return cache.results.data;
             }

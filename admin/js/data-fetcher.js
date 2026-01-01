@@ -33,9 +33,14 @@ window.DataFetcher = (function() {
     const RECHARGE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1c6gnCngs2wFOvVayd5XpM9D3LOlKUxtSjl7gfszXcMg/export?format=csv&gid=0';
 
     /**
-     * Cache TTL in milliseconds (60 seconds)
+     * Cache TTL in milliseconds (3 minutes - matches refresh interval)
      */
-    const CACHE_TTL = 60 * 1000;
+    const CACHE_TTL = 180 * 1000;
+
+    /**
+     * Fetch timeout in milliseconds (15 seconds)
+     */
+    const FETCH_TIMEOUT = 15 * 1000;
 
     // ============================================
     // Cache Storage
@@ -46,6 +51,12 @@ window.DataFetcher = (function() {
         // Processed data cache - cleared when raw data changes
         validation: { data: null, entriesHash: null },
         winners: { data: null, entriesHash: null, resultsHash: null }
+    };
+
+    // Fetch lock to prevent simultaneous requests
+    const fetchLock = {
+        entries: false,
+        recharges: false
     };
 
     /**
@@ -117,28 +128,43 @@ window.DataFetcher = (function() {
     // ============================================
     
     /**
-     * Fetch CSV data from Google Sheets with error handling
+     * Fetch CSV data from Google Sheets with timeout and error handling
      * @param {string} url - Sheet export URL
      * @returns {Promise<string>} Raw CSV text
      */
     async function fetchCSV(url) {
-        const response = await fetch(`${url}&t=${Date.now()}`, {
-            cache: 'no-store',
-            redirect: 'follow'
-        });
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+        
+        try {
+            const response = await fetch(`${url}&t=${Date.now()}`, {
+                cache: 'no-store',
+                redirect: 'follow',
+                signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const text = await response.text();
+
+            // Check if we got HTML instead of CSV
+            if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+                throw new Error('Sheet not publicly accessible');
+            }
+
+            return text;
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                throw new Error('Request timed out - please try again');
+            }
+            throw error;
         }
-
-        const text = await response.text();
-
-        // Check if we got HTML instead of CSV
-        if (text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
-            throw new Error('Sheet not publicly accessible');
-        }
-
-        return text;
     }
 
     // ============================================
@@ -189,12 +215,31 @@ window.DataFetcher = (function() {
             return cache.entries.data;
         }
 
+        // Return cached data if fetch is in progress
+        if (fetchLock.entries) {
+            console.log('Entries fetch already in progress, using cached data');
+            if (cache.entries.data) return cache.entries.data;
+            // Wait for current fetch to complete
+            await new Promise(resolve => {
+                const checkInterval = setInterval(() => {
+                    if (!fetchLock.entries) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
+            return cache.entries.data || [];
+        }
+
+        fetchLock.entries = true;
+
         try {
             const csvText = await fetchCSV(ENTRIES_SHEET_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
 
             if (lines.length <= 1) {
                 cache.entries = { data: [], timestamp: now };
+                fetchLock.entries = false;
                 return [];
             }
 
@@ -216,10 +261,12 @@ window.DataFetcher = (function() {
             });
 
             cache.entries = { data: entries, timestamp: now };
+            fetchLock.entries = false;
             return entries;
 
         } catch (error) {
             console.error('Error fetching entries:', error);
+            fetchLock.entries = false;
             // Return cached data if available, even if stale
             if (cache.entries.data) {
                 return cache.entries.data;
@@ -325,6 +372,24 @@ window.DataFetcher = (function() {
             return cache.recharges.data;
         }
 
+        // Return cached data if fetch is in progress
+        if (fetchLock.recharges) {
+            console.log('Recharges fetch already in progress, using cached data');
+            if (cache.recharges.data) return cache.recharges.data;
+            // Wait for current fetch to complete
+            await new Promise(resolve => {
+                const checkInterval = setInterval(() => {
+                    if (!fetchLock.recharges) {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }
+                }, 100);
+            });
+            return cache.recharges.data || [];
+        }
+
+        fetchLock.recharges = true;
+
         try {
             const csvText = await fetchCSV(RECHARGE_SHEET_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
@@ -334,6 +399,7 @@ window.DataFetcher = (function() {
             if (lines.length <= 1) {
                 console.warn('Recharge sheet has no data rows');
                 cache.recharges = { data: [], timestamp: now };
+                fetchLock.recharges = false;
                 return [];
             }
 
@@ -365,10 +431,12 @@ window.DataFetcher = (function() {
             });
 
             cache.recharges = { data: recharges, timestamp: now };
+            fetchLock.recharges = false;
             return recharges;
 
         } catch (error) {
             console.error('Error fetching recharges:', error);
+            fetchLock.recharges = false;
             if (cache.recharges.data) {
                 return cache.recharges.data;
             }

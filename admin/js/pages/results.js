@@ -221,16 +221,25 @@ window.ResultsPage = (function() {
     
     async function loadData() {
         try {
+            AdminCore.showLoading('Fetching results...');
+            AdminCore.updateLoadingProgress(30);
+            
             results = await ResultsFetcher.fetchResults();
+            
+            AdminCore.updateLoadingProgress(80, 'Rendering...');
+            
             filteredResults = [...results];
             
             renderStats();
             renderLatestResult();
             renderTable();
             
+            AdminCore.hideLoading();
+            
         } catch (error) {
             console.error('Error loading results:', error);
-            AdminCore.showToast('Error loading results', 'error');
+            AdminCore.hideLoading();
+            AdminCore.showToast('Error loading results: ' + error.message, 'error');
             
             const tbody = document.getElementById('resultsTableBody');
             if (tbody) {
