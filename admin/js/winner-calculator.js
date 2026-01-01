@@ -32,9 +32,9 @@ window.WinnerCalculator = (function() {
     const PRIZE_POOL = 1000;
     
     /**
-     * Minimum matches to qualify as a winner
+     * Minimum matches to qualify as a winner (3+ matches = winner)
      */
-    const MIN_MATCHES_TO_WIN = 2;
+    const MIN_MATCHES_TO_WIN = 3;
     
     /**
      * Valid entry statuses
@@ -42,14 +42,14 @@ window.WinnerCalculator = (function() {
     const VALID_STATUSES = ['VALID', 'VALIDADO', 'VALIDATED'];
     
     /**
-     * Prize tier names
+     * Prize tier names (3+ matches = winner)
      */
     const PRIZE_TIERS = {
-        5: { name: 'Jackpot', emoji: '🏆', label: '5 matches' },
-        4: { name: '2nd Prize', emoji: '🥈', label: '4 matches' },
-        3: { name: '3rd Prize', emoji: '🥉', label: '3 matches' },
-        2: { name: 'Consolation', emoji: '🎯', label: '2 matches' },
-        1: { name: 'Participation', emoji: '✨', label: '1 match' }
+        5: { name: 'Jackpot', emoji: '🏆', label: '5 matches', isWinner: true },
+        4: { name: '2nd Prize', emoji: '🥈', label: '4 matches', isWinner: true },
+        3: { name: '3rd Prize', emoji: '🥉', label: '3 matches', isWinner: true },
+        2: { name: 'No Prize', emoji: '❌', label: '2 matches', isWinner: false },
+        1: { name: 'No Prize', emoji: '❌', label: '1 match', isWinner: false }
     };
 
     // ============================================

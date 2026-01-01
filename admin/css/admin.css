@@ -1515,6 +1515,32 @@ a:hover {
 }
 
 /* ============================================
+   Tooltips
+   ============================================ */
+[title] {
+    position: relative;
+    cursor: help;
+}
+
+.badge[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    border-radius: var(--border-radius-sm);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+    z-index: 100;
+    margin-bottom: 4px;
+    border: 1px solid var(--border-secondary);
+    box-shadow: var(--shadow);
+}
+
+/* ============================================
    Print Styles
    ============================================ */
 @media print {

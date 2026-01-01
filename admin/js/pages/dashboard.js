@@ -209,11 +209,23 @@ window.DashboardPage = (function() {
                     <div class="section-header">
                         <h2 class="section-title">🎫 Latest Entries</h2>
                     </div>
-                    <div id="latestEntriesContainer" class="grid-3">
-                        <div class="card">
-                            <div class="card-body text-center text-muted">
-                                Loading entries...
-                            </div>
+                    <div class="card">
+                        <div class="table-container">
+                            <table class="table" id="latestEntriesTable">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Time</th>
+                                        <th>Game ID</th>
+                                        <th>Numbers</th>
+                                        <th>Contest</th>
+                                        <th>Draw Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="latestEntriesContainer">
+                                    <tr><td colspan="6" class="text-center text-muted">Loading entries...</td></tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>
@@ -270,12 +282,21 @@ window.DashboardPage = (function() {
      */
     function renderEngagementOverview() {
         const { entries, recharges } = currentData;
-        const engagement = RechargeValidator.analyzeEngagement(entries, recharges);
         
-        document.getElementById('statRechargers').textContent = engagement.totalRechargers.toLocaleString();
-        document.getElementById('statParticipants').textContent = engagement.totalParticipants.toLocaleString();
-        document.getElementById('statNoTicket').textContent = engagement.rechargedNoTicket.toLocaleString();
-        document.getElementById('statParticipationRate').textContent = `${engagement.participationRate}%`;
+        // If no recharges, show ticket creators only
+        if (!recharges || recharges.length === 0) {
+            const uniqueCreators = new Set(entries.map(e => e.gameId).filter(Boolean));
+            document.getElementById('statRechargers').textContent = '-';
+            document.getElementById('statParticipants').textContent = uniqueCreators.size.toLocaleString();
+            document.getElementById('statNoTicket').textContent = '-';
+            document.getElementById('statParticipationRate').textContent = '-';
+        } else {
+            const engagement = RechargeValidator.analyzeEngagement(entries, recharges);
+            document.getElementById('statRechargers').textContent = engagement.totalRechargers.toLocaleString();
+            document.getElementById('statParticipants').textContent = engagement.totalParticipants.toLocaleString();
+            document.getElementById('statNoTicket').textContent = engagement.rechargedNoTicket.toLocaleString();
+            document.getElementById('statParticipationRate').textContent = `${engagement.participationRate}%`;
+        }
         
         // Render comparison chart
         const now = AdminCore.getBrazilTime();
@@ -319,19 +340,22 @@ window.DashboardPage = (function() {
             return;
         }
         
+        // Check if recharge data is available
+        const hasRechargeData = recharges && recharges.length > 0;
+        
         tbody.innerHTML = dailyData.map(day => {
             const nonParticipationRate = day.totalRechargers > 0
                 ? ((day.rechargedNoTicket / day.totalRechargers) * 100).toFixed(1)
-                : '0.0';
+                : '-';
             
             return `
                 <tr>
                     <td><strong>${day.displayDate}</strong></td>
-                    <td>${day.totalRechargers}</td>
-                    <td>${day.totalParticipants}</td>
-                    <td class="text-warning">${day.rechargedNoTicket}</td>
-                    <td class="text-success">${day.participationRate}%</td>
-                    <td class="text-danger">${nonParticipationRate}%</td>
+                    <td>${hasRechargeData ? day.totalRechargers : '<span class="text-muted">-</span>'}</td>
+                    <td>${hasRechargeData ? day.totalParticipants : '<span class="text-muted">-</span>'}</td>
+                    <td class="text-warning">${hasRechargeData ? day.rechargedNoTicket : '<span class="text-muted">-</span>'}</td>
+                    <td class="text-success">${hasRechargeData ? day.participationRate + '%' : '<span class="text-muted">-</span>'}</td>
+                    <td class="text-danger">${hasRechargeData && day.totalRechargers > 0 ? nonParticipationRate + '%' : '<span class="text-muted">-</span>'}</td>
                     <td><strong>${day.totalEntries}</strong></td>
                 </tr>
             `;
@@ -467,23 +491,17 @@ window.DashboardPage = (function() {
     }
 
     /**
-     * Render latest entries cards
+     * Render latest entries table rows
      */
     function renderLatestEntries() {
         const container = document.getElementById('latestEntriesContainer');
         if (!container) return;
         
         const { entries } = currentData;
-        const latest = entries.slice(0, 12);
+        const latest = entries.slice(0, 15); // Show 15 entries
         
         if (latest.length === 0) {
-            container.innerHTML = `
-                <div class="card">
-                    <div class="card-body text-center text-muted">
-                        No entries found
-                    </div>
-                </div>
-            `;
+            container.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No entries found</td></tr>';
             return;
         }
         
@@ -517,25 +535,14 @@ window.DashboardPage = (function() {
                 : entry.timestamp;
             
             return `
-                <div class="card">
-                    <div class="card-body">
-                        <div class="d-flex justify-between align-center mb-2">
-                            <span class="badge badge-${statusClass}">${statusLabel}</span>
-                            <span class="text-muted" style="font-size: 0.75rem;">${formattedTime}</span>
-                        </div>
-                        <div class="mb-2">
-                            <span class="text-muted" style="font-size: 0.7rem;">ID: ${entry.gameId}</span>
-                            <span class="text-muted" style="font-size: 0.7rem; margin-left: 8px;">📱 ${AdminCore.maskWhatsApp(entry.whatsapp)}</span>
-                        </div>
-                        <div class="numbers-display mb-2">
-                            ${numbersHtml}
-                        </div>
-                        <div class="d-flex justify-between" style="font-size: 0.75rem;">
-                            <span class="text-muted">Contest: <strong>${entry.contest}</strong></span>
-                            <span class="text-muted">${entry.drawDate}</span>
-                        </div>
-                    </div>
-                </div>
+                <tr>
+                    <td><span class="badge badge-${statusClass}">${statusLabel}</span></td>
+                    <td style="font-size: 0.85rem; white-space: nowrap;">${formattedTime}</td>
+                    <td><strong>${entry.gameId}</strong></td>
+                    <td><div class="numbers-display">${numbersHtml}</div></td>
+                    <td>${entry.contest}</td>
+                    <td>${entry.drawDate}</td>
+                </tr>
             `;
         }).join('');
     }

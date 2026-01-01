@@ -234,34 +234,72 @@ window.DataFetcher = (function() {
     
     /**
      * Parse recharge row from CSV
+     * Expected columns: Game ID, Recharge ID, Timestamp, Amount, Status/Type
      * @param {string[]} row - CSV row values
      * @returns {Object|null} Parsed recharge object or null if invalid
      */
     function parseRechargeRow(row) {
-        // Expected columns may vary - look for rows with "充值" (recharge indicator)
+        if (!row || row.length < 2) return null;
+        
         const fullRow = row.join(' ');
         
-        // Only process recharge rows
-        if (!fullRow.includes('充值')) {
+        // Try to extract Game ID (10 digits) from the row
+        let gameId = '';
+        
+        // First, check if first column is a 10-digit game ID
+        if (row[0] && /^\d{10}$/.test(row[0].trim())) {
+            gameId = row[0].trim();
+        } else {
+            // Try to find 10-digit ID anywhere in the row
+            const gameIdMatch = fullRow.match(/\b(\d{10})\b/);
+            gameId = gameIdMatch ? gameIdMatch[1] : '';
+        }
+        
+        // Skip if no valid game ID found
+        if (!gameId) return null;
+        
+        // Skip header rows
+        if (gameId === '0000000000' || fullRow.toLowerCase().includes('game id')) {
             return null;
         }
 
-        // Try to extract Game ID (10 digits)
-        const gameIdMatch = fullRow.match(/\b(\d{10})\b/);
-        const gameId = gameIdMatch ? gameIdMatch[1] : '';
-        
-        if (!gameId) return null;
-
-        // Try to parse timestamp - look for date patterns
+        // Try to parse timestamp - look for various date patterns
         let rechargeTime = null;
-        const dateMatch = fullRow.match(/(\d{4}[-\/]\d{2}[-\/]\d{2}[\sT]\d{2}:\d{2}:\d{2})/);
-        if (dateMatch) {
-            rechargeTime = new Date(dateMatch[1].replace(/\//g, '-'));
+        
+        // Check each column for a date
+        for (const col of row) {
+            if (!col) continue;
+            const colStr = col.trim();
+            
+            // ISO format: 2024-12-30T15:30:00 or 2024-12-30 15:30:00
+            const isoMatch = colStr.match(/(\d{4}[-\/]\d{2}[-\/]\d{2}[\sT]\d{2}:\d{2}:\d{2})/);
+            if (isoMatch) {
+                rechargeTime = new Date(isoMatch[1].replace(/\//g, '-').replace(' ', 'T'));
+                break;
+            }
+            
+            // DD/MM/YYYY HH:MM:SS format
+            const dmyMatch = colStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
+            if (dmyMatch) {
+                rechargeTime = new Date(`${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}T${dmyMatch[4]}:${dmyMatch[5]}:${dmyMatch[6]}`);
+                break;
+            }
         }
 
-        // Try to extract amount
-        const amountMatch = fullRow.match(/[\d,]+\.?\d*/);
-        const amount = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
+        // Try to extract amount - look for numeric values
+        let amount = 0;
+        for (const col of row) {
+            if (!col) continue;
+            const numMatch = col.trim().match(/^[\d,]+\.?\d*$/);
+            if (numMatch && parseFloat(numMatch[0].replace(/,/g, '')) > 0) {
+                const parsed = parseFloat(numMatch[0].replace(/,/g, ''));
+                // Skip if it looks like a game ID or timestamp
+                if (parsed < 100000 && parsed > 0) {
+                    amount = parsed;
+                    break;
+                }
+            }
+        }
 
         return {
             gameId: gameId,
@@ -269,7 +307,7 @@ window.DataFetcher = (function() {
             rechargeTime: rechargeTime,
             rechargeTimeRaw: row[2] || '',
             amount: amount,
-            status: '充值',
+            status: 'RECHARGE',
             rawRow: row
         };
     }
@@ -291,21 +329,33 @@ window.DataFetcher = (function() {
             const csvText = await fetchCSV(RECHARGE_SHEET_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
 
+            console.log(`Recharge sheet: ${lines.length} lines loaded`);
+            
             if (lines.length <= 1) {
+                console.warn('Recharge sheet has no data rows');
                 cache.recharges = { data: [], timestamp: now };
                 return [];
             }
 
+            // Log first few lines for debugging
+            console.log('Recharge sheet header:', lines[0]);
+            if (lines[1]) console.log('Recharge sheet first row:', lines[1]);
+
             const delimiter = AdminCore.detectDelimiter(lines[0]);
             const recharges = [];
+            let skippedRows = 0;
 
             for (let i = 1; i < lines.length; i++) {
                 const row = AdminCore.parseCSVLine(lines[i], delimiter);
                 const recharge = parseRechargeRow(row);
                 if (recharge) {
                     recharges.push(recharge);
+                } else {
+                    skippedRows++;
                 }
             }
+
+            console.log(`Recharges parsed: ${recharges.length} valid, ${skippedRows} skipped`);
 
             // Sort by timestamp descending
             recharges.sort((a, b) => {

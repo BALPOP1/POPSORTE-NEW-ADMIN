@@ -55,19 +55,19 @@ window.EntriesPage = (function() {
                 <!-- Statistics -->
                 <div class="stats-grid mb-4" id="entriesStats">
                     <div class="stat-card success">
-                        <span class="stat-label">Valid</span>
+                        <span class="stat-label" title="Entries with valid recharge match">✓ Valid</span>
                         <span class="stat-value" id="statValid">--</span>
                     </div>
                     <div class="stat-card danger">
-                        <span class="stat-label">Invalid</span>
+                        <span class="stat-label" title="No recharge found, or recharge timing doesn't match draw date">✗ Invalid</span>
                         <span class="stat-value" id="statInvalid">--</span>
                     </div>
                     <div class="stat-card warning">
-                        <span class="stat-label">After Cutoff</span>
+                        <span class="stat-label" title="Registered after 20:00 BRT cutoff time">⏰ After Cutoff</span>
                         <span class="stat-value" id="statCutoff">--</span>
                     </div>
                     <div class="stat-card primary">
-                        <span class="stat-label">Total Recharges</span>
+                        <span class="stat-label" title="Total recharge transactions loaded">📊 Total Recharges</span>
                         <span class="stat-value" id="statRecharges">--</span>
                     </div>
                 </div>
@@ -347,21 +347,22 @@ window.EntriesPage = (function() {
             const status = validation?.status || 'UNKNOWN';
             const isCutoff = validation?.isCutoff || false;
             
-            // Status badge
+            // Status badge with reason tooltip
+            const reason = validation?.reason || '';
             let statusBadge = '';
             switch (status) {
                 case 'VALID':
-                    statusBadge = '<span class="badge badge-success">✅ VALID</span>';
+                    statusBadge = `<span class="badge badge-success" title="${reason}">✅ VALID</span>`;
                     break;
                 case 'INVALID':
-                    statusBadge = '<span class="badge badge-danger">❌ INVALID</span>';
+                    statusBadge = `<span class="badge badge-danger" title="${reason}">❌ INVALID</span>`;
                     break;
                 default:
-                    statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
+                    statusBadge = '<span class="badge badge-warning" title="Validation pending">⏳ PENDING</span>';
             }
             
             if (isCutoff) {
-                statusBadge += ' <span class="badge badge-gray">CUTOFF</span>';
+                statusBadge += ' <span class="badge badge-gray" title="Registered after 20:00 BRT cutoff">CUTOFF</span>';
             }
             
             // Numbers

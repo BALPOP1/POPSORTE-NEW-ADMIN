@@ -50,30 +50,22 @@ window.WinnersPage = (function() {
                     </div>
                 </div>
 
-                <!-- Summary Stats -->
+                <!-- Summary Stats (3+ matches = winner) -->
                 <div class="stats-grid mb-4" id="winnersSummaryStats">
                     <div class="stat-card" style="border-left-color: #fbbf24;">
-                        <span class="stat-label">🏆 5 matches</span>
+                        <span class="stat-label">🏆 5 matches (Jackpot)</span>
                         <span class="stat-value" id="stat5Matches">--</span>
                     </div>
                     <div class="stat-card" style="border-left-color: #9ca3af;">
-                        <span class="stat-label">🥈 4 matches</span>
+                        <span class="stat-label">🥈 4 matches (2nd)</span>
                         <span class="stat-value" id="stat4Matches">--</span>
                     </div>
                     <div class="stat-card" style="border-left-color: #d97706;">
-                        <span class="stat-label">🥉 3 matches</span>
+                        <span class="stat-label">🥉 3 matches (3rd)</span>
                         <span class="stat-value" id="stat3Matches">--</span>
                     </div>
-                    <div class="stat-card info">
-                        <span class="stat-label">🎯 2 matches</span>
-                        <span class="stat-value" id="stat2Matches">--</span>
-                    </div>
-                    <div class="stat-card">
-                        <span class="stat-label">✨ 1 match</span>
-                        <span class="stat-value" id="stat1Match">--</span>
-                    </div>
                     <div class="stat-card success">
-                        <span class="stat-label">Total Winners</span>
+                        <span class="stat-label">Total Winners (3+)</span>
                         <span class="stat-value" id="statTotalWinners">--</span>
                     </div>
                 </div>
@@ -124,12 +116,10 @@ window.WinnersPage = (function() {
                     <div class="filter-group">
                         <label>Prize Level</label>
                         <select id="filterWinnersPrizeLevel">
-                            <option value="all">All</option>
-                            <option value="5">🏆 5 matches</option>
-                            <option value="4">🥈 4 matches</option>
-                            <option value="3">🥉 3 matches</option>
-                            <option value="2">🎯 2 matches</option>
-                            <option value="1">✨ 1 match</option>
+                            <option value="all">All Winners</option>
+                            <option value="5">🏆 5 matches (Jackpot)</option>
+                            <option value="4">🥈 4 matches (2nd Prize)</option>
+                            <option value="3">🥉 3 matches (3rd Prize)</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -187,8 +177,6 @@ window.WinnersPage = (function() {
         document.getElementById('stat5Matches').textContent = (stats.byTier[5] || 0).toLocaleString();
         document.getElementById('stat4Matches').textContent = (stats.byTier[4] || 0).toLocaleString();
         document.getElementById('stat3Matches').textContent = (stats.byTier[3] || 0).toLocaleString();
-        document.getElementById('stat2Matches').textContent = (stats.byTier[2] || 0).toLocaleString();
-        document.getElementById('stat1Match').textContent = (stats.byTier[1] || 0).toLocaleString();
         document.getElementById('statTotalWinners').textContent = stats.totalWinners.toLocaleString();
     }
 

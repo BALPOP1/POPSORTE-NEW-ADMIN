@@ -319,7 +319,8 @@ window.AdminCharts = (function() {
         const data = [];
         const backgroundColors = [];
         
-        for (let tier = 5; tier >= 1; tier--) {
+        // Only show 3+ matches (winners)
+        for (let tier = 5; tier >= 3; tier--) {
             const count = stats.byTier[tier] || 0;
             if (count > 0) {
                 labels.push(`${tier} matches`);

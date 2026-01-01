@@ -255,13 +255,13 @@ window.RechargeValidator = (function() {
         const existingStatus = (ticket.status || '').toUpperCase();
         if (['VALID', 'VALIDADO', 'VALIDATED'].includes(existingStatus)) {
             result.status = ValidationStatus.VALID;
-            result.reason = 'Ticket marked as valid in source';
+            result.reason = 'Pre-validated in source data';
             return result;
         }
         
         if (['INVALID', 'INVÁLIDO'].includes(existingStatus)) {
             result.status = ValidationStatus.INVALID;
-            result.reason = 'Ticket marked as invalid in source';
+            result.reason = 'Marked invalid in source data';
             return result;
         }
         
@@ -269,7 +269,7 @@ window.RechargeValidator = (function() {
         const gameId = ticket.gameId;
         if (!gameId) {
             result.status = ValidationStatus.INVALID;
-            result.reason = 'No Game ID';
+            result.reason = 'Missing Game ID';
             return result;
         }
         
@@ -278,7 +278,7 @@ window.RechargeValidator = (function() {
         
         if (recharges.length === 0) {
             result.status = ValidationStatus.INVALID;
-            result.reason = 'No recharge found for this Game ID';
+            result.reason = 'No recharge found for Game ID: ' + gameId;
             return result;
         }
         
@@ -301,11 +301,11 @@ window.RechargeValidator = (function() {
         
         if (matchedRecharge) {
             result.status = ValidationStatus.VALID;
-            result.reason = 'Valid recharge found';
+            result.reason = `Matched recharge R$${matchedRecharge.amount || '?'}`;
             result.matchedRecharge = matchedRecharge;
         } else {
             result.status = ValidationStatus.INVALID;
-            result.reason = 'No matching recharge for this draw date';
+            result.reason = 'Recharge exists but timing does not match draw window';
         }
         
         return result;
