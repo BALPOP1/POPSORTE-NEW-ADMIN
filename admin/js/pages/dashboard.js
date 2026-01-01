@@ -556,16 +556,19 @@ window.DashboardPage = (function() {
      */
     async function loadData() {
         try {
-            // Fetch data - these return immediately if cached
-            const entries = await DataFetcher.fetchEntries();
-            const results = await ResultsFetcher.fetchResults();
+            // Fetch all data in parallel for faster loading
+            const [entriesResult, resultsResult, rechargesResult] = await Promise.allSettled([
+                DataFetcher.fetchEntries(),
+                ResultsFetcher.fetchResults(),
+                DataFetcher.fetchRecharges()
+            ]);
             
-            // Fetch recharges (can fail gracefully)
-            let recharges = [];
-            try {
-                recharges = await DataFetcher.fetchRecharges();
-            } catch (e) {
-                console.warn('Could not fetch recharges:', e);
+            const entries = entriesResult.status === 'fulfilled' ? entriesResult.value : [];
+            const results = resultsResult.status === 'fulfilled' ? resultsResult.value : [];
+            const recharges = rechargesResult.status === 'fulfilled' ? rechargesResult.value : [];
+            
+            if (rechargesResult.status === 'rejected') {
+                console.warn('Could not fetch recharges:', rechargesResult.reason);
             }
             
             currentData = { entries, recharges, results };

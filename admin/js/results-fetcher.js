@@ -187,11 +187,22 @@ window.ResultsFetcher = (function() {
             const delimiter = AdminCore.detectDelimiter(lines[0]);
             const results = [];
 
-            for (let i = 1; i < lines.length; i++) {
-                const row = AdminCore.parseCSVLine(lines[i], delimiter);
-                const result = parseResultRow(row);
-                if (result) {
-                    results.push(result);
+            // Parse CSV in batches to avoid blocking UI
+            const batchSize = 500;
+            for (let i = 1; i < lines.length; i += batchSize) {
+                const batch = lines.slice(i, Math.min(i + batchSize, lines.length));
+                
+                for (const line of batch) {
+                    const row = AdminCore.parseCSVLine(line, delimiter);
+                    const result = parseResultRow(row);
+                    if (result) {
+                        results.push(result);
+                    }
+                }
+                
+                // Yield to UI thread after each batch
+                if (i + batchSize < lines.length) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
                 }
             }
 

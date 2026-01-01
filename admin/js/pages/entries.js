@@ -720,14 +720,17 @@ window.EntriesPage = (function() {
     
     async function loadData() {
         try {
-            // Fetch data - these return immediately if cached
-            const entries = await DataFetcher.fetchEntries();
+            // Fetch data in parallel for faster loading
+            const [entriesResult, rechargesResult] = await Promise.allSettled([
+                DataFetcher.fetchEntries(),
+                DataFetcher.fetchRecharges()
+            ]);
             
-            let recharges = [];
-            try {
-                recharges = await DataFetcher.fetchRecharges();
-            } catch (e) {
-                console.warn('Could not fetch recharges:', e);
+            const entries = entriesResult.status === 'fulfilled' ? entriesResult.value : [];
+            const recharges = rechargesResult.status === 'fulfilled' ? rechargesResult.value : [];
+            
+            if (rechargesResult.status === 'rejected') {
+                console.warn('Could not fetch recharges:', rechargesResult.reason);
             }
             
             // Validate all tickets (uses caching internally)

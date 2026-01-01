@@ -425,9 +425,21 @@ window.WinnersPage = (function() {
     
     async function loadData() {
         try {
-            // Fetch data - these return immediately if cached
-            const entries = await DataFetcher.fetchEntries();
-            const results = await ResultsFetcher.fetchResults();
+            // Fetch data in parallel for faster loading
+            const [entriesResult, resultsResult] = await Promise.allSettled([
+                DataFetcher.fetchEntries(),
+                ResultsFetcher.fetchResults()
+            ]);
+            
+            const entries = entriesResult.status === 'fulfilled' ? entriesResult.value : [];
+            const results = resultsResult.status === 'fulfilled' ? resultsResult.value : [];
+            
+            if (entriesResult.status === 'rejected') {
+                console.error('Could not fetch entries:', entriesResult.reason);
+            }
+            if (resultsResult.status === 'rejected') {
+                console.error('Could not fetch results:', resultsResult.reason);
+            }
             
             // Calculate all winners (uses caching internally)
             const calculation = await WinnerCalculator.calculateAllWinners(entries, results);
