@@ -349,7 +349,19 @@ window.RechargeValidator = (function() {
             }
         }
         
-        console.log('Computing validation results for', entries.length, 'entries...');
+        console.log('Computing validation results for', entries.length, 'entries with', recharges.length, 'recharges...');
+        
+        // Debug: Sample some recharge data
+        if (recharges.length > 0) {
+            const sample = recharges[0];
+            console.log('Sample recharge:', {
+                gameId: sample.gameId,
+                rechargeId: sample.rechargeId?.substring(0, 20) + '...',
+                hasTime: !!sample.rechargeTime,
+                isDate: sample.rechargeTime instanceof Date,
+                amount: sample.amount
+            });
+        }
         
         // Group recharges by game ID
         const rechargesByGameId = {};
@@ -360,6 +372,8 @@ window.RechargeValidator = (function() {
             }
             rechargesByGameId[r.gameId].push(r);
         });
+        
+        console.log('Recharges grouped for', Object.keys(rechargesByGameId).length, 'unique game IDs');
         
         // Group tickets by game ID
         const ticketsByGameId = {};
@@ -419,6 +433,16 @@ window.RechargeValidator = (function() {
             stats,
             rechargeCount: recharges.length
         };
+        
+        console.log('Validation complete:', stats);
+        console.log('Sample validated tickets (first 3 VALID):', 
+            results.filter(v => v.status === 'VALID').slice(0, 3).map(v => ({
+                ticket: v.ticket?.ticketNumber,
+                gameId: v.ticket?.gameId,
+                hasRecharge: !!v.matchedRecharge,
+                amount: v.matchedRecharge?.amount
+            }))
+        );
         
         // Cache the results
         DataFetcher.setCachedValidation(result);

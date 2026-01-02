@@ -381,9 +381,9 @@ window.UnifiedPage = (function() {
                 const r = validation.matchedRecharge;
                 const rechargeId = r.rechargeId || '';
                 const shortId = rechargeId.length > 18 ? rechargeId.substring(0, 18) + '...' : rechargeId;
-                const rechargeTime = r.rechargeTimeObj 
-                    ? AdminCore.formatBrazilDateTime(r.rechargeTimeObj, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-                    : (r.rechargeTime || '-');
+                const rechargeTime = r.rechargeTime instanceof Date
+                    ? AdminCore.formatBrazilDateTime(r.rechargeTime, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                    : (r.rechargeTimeRaw || '-');
                 const amount = r.amount ? `R$ ${r.amount.toFixed(2)}` : '-';
                 
                 rechargeInfo = `
@@ -478,9 +478,9 @@ window.UnifiedPage = (function() {
         let rechargeHtml = '<p class="text-muted">No linked recharge found</p>';
         if (validation?.matchedRecharge) {
             const r = validation.matchedRecharge;
-            const rechargeTimeFormatted = r.rechargeTimeObj 
-                ? AdminCore.formatBrazilDateTime(r.rechargeTimeObj, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                : (r.rechargeTime || '-');
+            const rechargeTimeFormatted = r.rechargeTime instanceof Date
+                ? AdminCore.formatBrazilDateTime(r.rechargeTime, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : (r.rechargeTimeRaw || '-');
             
             rechargeHtml = `
                 <div class="ticket-info-grid">
@@ -870,6 +870,19 @@ window.UnifiedPage = (function() {
             currentData.validationResults = await RechargeValidator.validateAllTickets(currentData.entries, currentData.allRecharges, skipCache);
             
             console.log('UnifiedPage: Data loaded -', currentData.entries.length, 'entries,', currentData.recharges.length, 'recharges for platform:', platform);
+            console.log('UnifiedPage: Total recharges (all platforms):', currentData.allRecharges.length);
+            console.log('UnifiedPage: Validation results:', currentData.validationResults);
+            
+            // Debug: Check first few validation results
+            if (currentData.validationResults && currentData.validationResults.results) {
+                const sampleResults = currentData.validationResults.results.slice(0, 5);
+                console.log('UnifiedPage: Sample validation results:', sampleResults.map(v => ({
+                    ticket: v.ticket?.ticketNumber,
+                    status: v.status,
+                    hasRecharge: !!v.matchedRecharge,
+                    rechargeAmount: v.matchedRecharge?.amount
+                })));
+            }
             
             // Render all sections
             renderDashboard();
