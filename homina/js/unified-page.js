@@ -366,15 +366,43 @@ window.UnifiedPage = (function() {
             
             // Debug first entry
             if (index === 0) {
-                console.log('First entry rendering:', {
+                console.log('===== FIRST ENTRY RENDERING DEBUG =====');
+                console.log('Entry:', {
                     ticketNumber: entry.ticketNumber,
                     gameId: entry.gameId,
-                    hasValidation: !!validation,
-                    validationStatus: status,
-                    hasMatchedRecharge: !!validation?.matchedRecharge,
-                    hasBoundRecharge: !!entry.boundRecharge,
-                    matchedRecharge: validation?.matchedRecharge
+                    drawDate: entry.drawDate,
+                    parsedDate: entry.parsedDate
                 });
+                console.log('Validation:', {
+                    exists: !!validation,
+                    status: status,
+                    reason: validation?.reason,
+                    isCutoff: isCutoff,
+                    hasMatchedRecharge: !!validation?.matchedRecharge
+                });
+                if (validation?.matchedRecharge) {
+                    console.log('Matched Recharge:', {
+                        gameId: validation.matchedRecharge.gameId,
+                        rechargeId: validation.matchedRecharge.rechargeId?.substring(0, 30),
+                        amount: validation.matchedRecharge.amount,
+                        rechargeTime: validation.matchedRecharge.rechargeTime,
+                        isValidDate: validation.matchedRecharge.rechargeTime instanceof Date && !isNaN(validation.matchedRecharge.rechargeTime.getTime())
+                    });
+                } else {
+                    console.log('NO MATCHED RECHARGE - checking why...');
+                    // Check if there are recharges for this game ID
+                    const gameRecharges = currentData.allRecharges.filter(r => r.gameId === entry.gameId);
+                    console.log(`Found ${gameRecharges.length} recharges for gameId ${entry.gameId}`);
+                    if (gameRecharges.length > 0) {
+                        console.log('First recharge for this gameId:', {
+                            gameId: gameRecharges[0].gameId,
+                            amount: gameRecharges[0].amount,
+                            rechargeTime: gameRecharges[0].rechargeTime,
+                            isValidDate: gameRecharges[0].rechargeTime instanceof Date && !isNaN(gameRecharges[0].rechargeTime.getTime())
+                        });
+                    }
+                }
+                console.log('========================================');
             }
             
             // Status badge with cutoff indicator

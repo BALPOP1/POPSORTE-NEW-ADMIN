@@ -296,73 +296,80 @@ window.DataFetcher = (function() {
      * @returns {Object|null} Parsed recharge object or null if invalid
      */
     function parseRechargeRow(row) {
-        if (!row || row.length < 2) return null;
+        if (!row || row.length < 9) return null;
         
-        const fullRow = row.join(' ');
-        
-        // Try to extract Game ID (10 digits) from the row
-        let gameId = '';
-        
-        // First, check if first column is a 10-digit game ID
-        if (row[0] && /^\d{10}$/.test(row[0].trim())) {
-            gameId = row[0].trim();
-        } else {
-            // Try to find 10-digit ID anywhere in the row
-            const gameIdMatch = fullRow.match(/\b(\d{10})\b/);
-            gameId = gameIdMatch ? gameIdMatch[1] : '';
-        }
-        
-        // Skip if no valid game ID found
-        if (!gameId) return null;
-        
-        // Skip header rows
-        if (gameId === '0000000000' || fullRow.toLowerCase().includes('game id')) {
+        // Skip header row
+        if (row[0] && (row[0].toLowerCase().includes('member') || row[0].toLowerCase().includes('id'))) {
             return null;
         }
-
-        // Try to parse timestamp - look for various date patterns
-        let rechargeTime = null;
         
-        // Check each column for a date
-        for (const col of row) {
-            if (!col) continue;
-            const colStr = col.trim();
-            
-            // ISO format: 2024-12-30T15:30:00 or 2024-12-30 15:30:00
-            const isoMatch = colStr.match(/(\d{4}[-\/]\d{2}[-\/]\d{2}[\sT]\d{2}:\d{2}:\d{2})/);
-            if (isoMatch) {
-                rechargeTime = new Date(isoMatch[1].replace(/\//g, '-').replace(' ', 'T'));
-                break;
-            }
-            
-            // DD/MM/YYYY HH:MM:SS format
-            const dmyMatch = colStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
-            if (dmyMatch) {
-                rechargeTime = new Date(`${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}T${dmyMatch[4]}:${dmyMatch[5]}:${dmyMatch[6]}`);
-                break;
-            }
+        // CSV Structure: Member ID,Order Number,Region,Currency Type,Merchant,Record Time,Account Change Type,Account Change Category II,Change Amount,...
+        // Column 0: Member ID (gameId) - 10 digits
+        // Column 1: Order Number (rechargeId)
+        // Column 5: Record Time (timestamp) - DD/MM/YYYY HH:MM:SS
+        // Column 8: Change Amount
+        
+        const gameId = row[0] ? row[0].trim() : '';
+        const rechargeId = row[1] ? row[1].trim() : '';
+        const timestampStr = row[5] ? row[5].trim() : '';
+        const amountStr = row[8] ? row[8].trim() : '';
+        
+        // Validate game ID (must be 10 digits)
+        if (!gameId || !/^\d{10}$/.test(gameId)) {
+            return null;
         }
-
-        // Try to extract amount - look for numeric values
-        let amount = 0;
-        for (const col of row) {
-            if (!col) continue;
-            const numMatch = col.trim().match(/^[\d,]+\.?\d*$/);
-            if (numMatch && parseFloat(numMatch[0].replace(/,/g, '')) > 0) {
-                const parsed = parseFloat(numMatch[0].replace(/,/g, ''));
-                // Skip if it looks like a game ID or timestamp
-                if (parsed < 100000 && parsed > 0) {
-                    amount = parsed;
-                    break;
+        
+        // Parse timestamp from column 5: DD/MM/YYYY HH:MM:SS
+        let rechargeTime = null;
+        if (timestampStr) {
+            // Try DD/MM/YYYY HH:MM:SS format
+            const dmyMatch = timestampStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
+            if (dmyMatch) {
+                // Parse date components
+                const day = parseInt(dmyMatch[1], 10);
+                const month = parseInt(dmyMatch[2], 10) - 1; // Month is 0-indexed
+                const year = parseInt(dmyMatch[3], 10);
+                const hour = parseInt(dmyMatch[4], 10);
+                const minute = parseInt(dmyMatch[5], 10);
+                const second = parseInt(dmyMatch[6], 10);
+                
+                // Create date string in ISO format (treating as local time, will be converted correctly)
+                // Format: YYYY-MM-DDTHH:MM:SS
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+                rechargeTime = new Date(dateStr);
+            } else {
+                // Try ISO format as fallback
+                const isoMatch = timestampStr.match(/(\d{4}[-\/]\d{2}[-\/]\d{2}[\sT]\d{2}:\d{2}:\d{2})/);
+                if (isoMatch) {
+                    rechargeTime = new Date(isoMatch[1].replace(/\//g, '-').replace(' ', 'T'));
                 }
             }
+        }
+        
+        // Validate date
+        if (rechargeTime && (isNaN(rechargeTime.getTime()) || !(rechargeTime instanceof Date))) {
+            rechargeTime = null;
+        }
+        
+        // Parse amount from column 8
+        let amount = 0;
+        if (amountStr) {
+            const parsed = parseFloat(amountStr.replace(/,/g, ''));
+            if (!isNaN(parsed) && parsed > 0) {
+                amount = parsed;
+            }
+        }
+        
+        // Skip if missing critical data
+        if (!rechargeId || !rechargeTime || amount === 0) {
+            return null;
         }
 
         return {
             gameId: gameId,
-            rechargeId: row[1] || '',
+            rechargeId: rechargeId,
             rechargeTime: rechargeTime,
-            rechargeTimeRaw: row[2] || '',
+            rechargeTimeRaw: timestampStr,
             amount: amount,
             status: 'RECHARGE',
             rawRow: row
