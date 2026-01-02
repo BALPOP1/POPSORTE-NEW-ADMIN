@@ -635,14 +635,11 @@ window.DashboardPage = (function() {
         }
     }
 
-    // Listen for page changes
+    // Listen for page changes - only initialize when user navigates to page
     if (typeof AdminCore !== 'undefined') {
         AdminCore.on('pageChange', ({ page }) => {
-            if (page === 'dashboard') {
-                if (!isInitialized) {
-                    init();
-                }
-                // Don't auto-refresh when returning to dashboard - wait for manual refresh or timer
+            if (page === 'dashboard' && !isInitialized) {
+                init();
             }
         });
         
@@ -653,19 +650,8 @@ window.DashboardPage = (function() {
             }
         });
     }
-
-    // Initialize if dashboard is the current page (only once on load)
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            if (!isInitialized && (window.location.hash === '#dashboard' || window.location.hash === '')) {
-                init();
-            }
-        });
-    } else {
-        if (!isInitialized && (window.location.hash === '#dashboard' || window.location.hash === '')) {
-            init();
-        }
-    }
+    
+    // Don't auto-initialize - wait for pageChange event after login
 
     // ============================================
     // Public API

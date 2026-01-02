@@ -1613,6 +1613,105 @@ a:hover {
 }
 
 /* ============================================
+   Virtual Scroll Table
+   ============================================ */
+.table-header-container {
+    background: var(--bg-tertiary);
+    border-bottom: 2px solid var(--accent-color);
+}
+
+.table-header-container table {
+    margin-bottom: 0;
+    border: none;
+}
+
+.table-header-container th {
+    background: transparent;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.entries-virtual-container {
+    min-height: 400px;
+    max-height: 600px;
+    overflow: hidden;
+}
+
+.virtual-table-wrapper {
+    width: 100%;
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    border: none;
+}
+
+.virtual-table-viewport {
+    height: 500px;
+    overflow-y: auto;
+    overflow-x: auto;
+    position: relative;
+}
+
+.virtual-table-content {
+    position: relative;
+    width: 100%;
+}
+
+.virtual-table {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    border: none;
+}
+
+.virtual-table tbody {
+    position: relative;
+    will-change: transform;
+}
+
+.virtual-table tr {
+    height: 48px;
+}
+
+.virtual-table td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+/* Scroll indicator */
+.virtual-table-wrapper::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 40px;
+    pointer-events: none;
+    background: linear-gradient(transparent, var(--bg-secondary));
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.virtual-table-wrapper:hover::after {
+    opacity: 1;
+}
+
+/* Row count indicator */
+.virtual-scroll-info {
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-color);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* ============================================
    Print Styles
    ============================================ */
 @media print {

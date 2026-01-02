@@ -541,8 +541,8 @@ window.AdminCore = (function() {
             });
         });
 
-        // Set initial route
-        handleRouteChange();
+        // Defer initial route to allow page to render first
+        setTimeout(handleRouteChange, 0);
     }
 
     // ============================================
