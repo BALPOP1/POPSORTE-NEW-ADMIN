@@ -106,13 +106,18 @@ window.WinnerCalculator = (function() {
      * @param {Object[]} entries - Entries for this contest
      * @param {Object} result - Result object with winning numbers
      * @param {string} platform - Platform code for prize calculation
+     * @param {string} contestId - Contest ID (fallback if result doesn't have it)
      * @returns {Object} Winners calculation result
      */
-    function calculateContestWinners(entries, result, platform = 'POPN1') {
+    function calculateContestWinners(entries, result, platform = 'POPN1', contestId = null) {
+        // Get contest ID from result, entries, or parameter
+        const contest = result?.contest || contestId || entries[0]?.contest || 'Unknown';
+        const drawDate = result?.drawDate || '';
+        
         if (!result || result.isNoDraw || result.numbers.length !== 5) {
             return {
-                contest: result?.contest || 'Unknown',
-                drawDate: result?.drawDate || '',
+                contest: contest,
+                drawDate: drawDate,
                 winningNumbers: [],
                 hasResult: false,
                 totalEntries: entries.length,
@@ -181,8 +186,8 @@ window.WinnerCalculator = (function() {
         }
         
         return {
-            contest: result.contest,
-            drawDate: result.drawDate,
+            contest: contest,
+            drawDate: drawDate,
             winningNumbers: winningNumbers,
             hasResult: true,
             totalEntries: entries.length,
@@ -227,13 +232,18 @@ window.WinnerCalculator = (function() {
         // Group entries by contest
         const entriesByContest = DataFetcher.groupEntriesByContest(filteredEntries);
         
-        // Create results lookup map
+        // Create results lookup map and collect all contest IDs
         const resultsMap = new Map();
+        const allContestIds = new Set();
         results.forEach(r => {
             if (r.contest) {
                 resultsMap.set(r.contest, r);
+                allContestIds.add(r.contest);
             }
         });
+        
+        // Also add contests from entries (in case a contest has entries but no result yet)
+        Object.keys(entriesByContest).forEach(contest => allContestIds.add(contest));
         
         // Determine the effective platform for prize calculation
         const effectivePlatform = platform === 'ALL' ? 'DEFAULT' : platform;
@@ -252,16 +262,17 @@ window.WinnerCalculator = (function() {
             prizePool: prizePool
         };
         
-        const contestKeys = Object.keys(entriesByContest);
+        // Process all contests (both with entries and with results)
+        const contestKeys = Array.from(allContestIds);
         const batchSize = 10;
         
         for (let i = 0; i < contestKeys.length; i += batchSize) {
             const batch = contestKeys.slice(i, i + batchSize);
             
             for (const contest of batch) {
-                const contestEntries = entriesByContest[contest];
+                const contestEntries = entriesByContest[contest] || []; // Empty array if no entries for this platform
                 const result = resultsMap.get(contest);
-                const contestWinners = calculateContestWinners(contestEntries, result, effectivePlatform);
+                const contestWinners = calculateContestWinners(contestEntries, result, effectivePlatform, contest);
                 
                 contestResults.push(contestWinners);
                 

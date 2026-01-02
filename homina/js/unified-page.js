@@ -610,10 +610,13 @@ window.UnifiedPage = (function() {
         }
         
         container.innerHTML = contestsWithResults.map(contest => {
-            const numbersHtml = contest.winningNumbers.map(n => {
-                const colorClass = AdminCore.getBallColorClass(n);
-                return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
-            }).join('');
+            // Always show winning numbers if available
+            const numbersHtml = contest.winningNumbers && contest.winningNumbers.length > 0
+                ? contest.winningNumbers.map(n => {
+                    const colorClass = AdminCore.getBallColorClass(n);
+                    return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
+                }).join('')
+                : '<span class="text-muted">Winning numbers not available</span>';
             
             const tierCounts = [];
             for (let tier = 5; tier >= 3; tier--) {
