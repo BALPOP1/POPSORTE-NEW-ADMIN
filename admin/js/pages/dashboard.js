@@ -572,9 +572,15 @@ window.DashboardPage = (function() {
 
     // Event listeners
     if (typeof AdminCore !== 'undefined') {
-        AdminCore.on('pageChange', ({ page }) => {
-            if (page === 'dashboard' && !isInitialized) {
-                init();
+        AdminCore.on('pageChange', ({ page, isFirstVisit }) => {
+            if (page === 'dashboard') {
+                if (!isInitialized) {
+                    init();
+                } else {
+                    // Reload data when returning to dashboard
+                    console.log('Dashboard: Page revisited, reloading data');
+                    loadData();
+                }
             }
         });
         

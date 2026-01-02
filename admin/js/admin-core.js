@@ -546,23 +546,34 @@ window.AdminCore = (function() {
             btn.classList.toggle('active', isActive);
         });
         
-        // Update page title with platform indicator
-        const pageTitle = document.getElementById('pageTitle');
+        // Update platform indicator in title
         const platformIndicator = document.getElementById('platformIndicator');
         if (platformIndicator) {
             platformIndicator.textContent = currentPlatform === 'ALL' ? '' : `[${currentPlatform}]`;
         }
+        
+        console.log('Platform UI updated:', currentPlatform);
     }
 
     /**
      * Initialize platform switcher
      */
     function initPlatformSwitcher() {
-        document.querySelectorAll('.platform-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                setCurrentPlatform(btn.dataset.platform);
+        const buttons = document.querySelectorAll('.platform-btn');
+        console.log('Initializing platform switcher, found', buttons.length, 'buttons');
+        
+        buttons.forEach(btn => {
+            const platform = btn.dataset.platform;
+            console.log('Adding click listener for platform:', platform);
+            
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('Platform button clicked:', platform);
+                setCurrentPlatform(platform);
             });
         });
+        
         updatePlatformSwitcherUI();
     }
 
@@ -596,7 +607,7 @@ window.AdminCore = (function() {
     function handleRouteChange() {
         const page = getCurrentPageFromHash();
         
-        if (page === currentPage) return;
+        const isFirstVisit = page !== currentPage;
         currentPage = page;
 
         // Update active nav link
@@ -604,7 +615,7 @@ window.AdminCore = (function() {
             link.classList.toggle('active', link.dataset.page === page);
         });
 
-        // Update page title
+        // Update page title - preserve platform indicator span
         const pageTitles = {
             dashboard: 'Dashboard',
             entries: 'Entries',
@@ -612,8 +623,12 @@ window.AdminCore = (function() {
             winners: 'Winners'
         };
         const pageTitle = document.getElementById('pageTitle');
+        const platformIndicator = document.getElementById('platformIndicator');
         if (pageTitle) {
-            pageTitle.textContent = pageTitles[page] || 'Dashboard';
+            // Rebuild the title with indicator span
+            const titleText = pageTitles[page] || 'Dashboard';
+            const indicatorText = currentPlatform === 'ALL' ? '' : `[${currentPlatform}]`;
+            pageTitle.innerHTML = `${titleText} <span id="platformIndicator" class="platform-indicator">${indicatorText}</span>`;
         }
 
         // Show/hide pages
@@ -622,8 +637,8 @@ window.AdminCore = (function() {
             pageEl.classList.toggle('active', isActive);
         });
 
-        // Emit page change event
-        emit('pageChange', { page });
+        // Emit page change event with isFirstVisit flag
+        emit('pageChange', { page, isFirstVisit });
     }
 
     /**

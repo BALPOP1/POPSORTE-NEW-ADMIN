@@ -746,9 +746,15 @@ window.EntriesPage = (function() {
 
     // Listen for page changes
     if (typeof AdminCore !== 'undefined') {
-        AdminCore.on('pageChange', ({ page }) => {
-            if (page === 'entries' && !isInitialized) {
-                init();
+        AdminCore.on('pageChange', ({ page, isFirstVisit }) => {
+            if (page === 'entries') {
+                if (!isInitialized) {
+                    init();
+                } else {
+                    // Reload data when returning to entries
+                    console.log('Entries: Page revisited, reloading data');
+                    loadData();
+                }
             }
         });
         

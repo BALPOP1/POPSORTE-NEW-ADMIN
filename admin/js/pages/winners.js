@@ -357,9 +357,15 @@ window.WinnersPage = (function() {
 
     // Event listeners
     if (typeof AdminCore !== 'undefined') {
-        AdminCore.on('pageChange', ({ page }) => {
-            if (page === 'winners' && !isInitialized) {
-                init();
+        AdminCore.on('pageChange', ({ page, isFirstVisit }) => {
+            if (page === 'winners') {
+                if (!isInitialized) {
+                    init();
+                } else {
+                    // Recalculate winners when returning to page
+                    console.log('Winners: Page revisited, recalculating');
+                    calculateWinners(false);
+                }
             }
         });
         

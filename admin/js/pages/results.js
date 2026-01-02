@@ -287,12 +287,15 @@ window.ResultsPage = (function() {
 
     // Listen for page changes
     if (typeof AdminCore !== 'undefined') {
-        AdminCore.on('pageChange', ({ page }) => {
+        AdminCore.on('pageChange', ({ page, isFirstVisit }) => {
             if (page === 'results') {
                 if (!isInitialized) {
                     init();
+                } else {
+                    // Reload data when returning to results
+                    console.log('Results: Page revisited, reloading data');
+                    loadData();
                 }
-                // Don't auto-refresh when returning to page - wait for manual refresh or timer
             }
         });
         

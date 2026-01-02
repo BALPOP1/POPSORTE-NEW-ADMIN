@@ -357,10 +357,12 @@ a:hover {
 
 .platform-btn .platform-icon {
     font-size: 1rem;
+    pointer-events: none;
 }
 
 .platform-btn .platform-name {
     font-weight: 600;
+    pointer-events: none;
 }
 
 .platform-indicator {
