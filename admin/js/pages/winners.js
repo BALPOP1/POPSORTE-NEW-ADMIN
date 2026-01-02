@@ -121,9 +121,10 @@ window.WinnersPage = (function() {
         if (!calculation) return;
         
         const stats = calculation.stats;
-        document.getElementById('stat5Matches').textContent = (stats.match5 || 0).toLocaleString();
-        document.getElementById('stat4Matches').textContent = (stats.match4 || 0).toLocaleString();
-        document.getElementById('stat3Matches').textContent = (stats.match3 || 0).toLocaleString();
+        // Stats are in stats.byTier[5], stats.byTier[4], etc.
+        document.getElementById('stat5Matches').textContent = (stats.byTier?.[5] || 0).toLocaleString();
+        document.getElementById('stat4Matches').textContent = (stats.byTier?.[4] || 0).toLocaleString();
+        document.getElementById('stat3Matches').textContent = (stats.byTier?.[3] || 0).toLocaleString();
         document.getElementById('statTotalWinners').textContent = (stats.totalWinners || 0).toLocaleString();
     }
 

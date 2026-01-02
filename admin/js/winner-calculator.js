@@ -37,9 +37,11 @@ window.WinnerCalculator = (function() {
     const MIN_MATCHES_TO_WIN = 3;
     
     /**
-     * Valid entry statuses
+     * Valid entry statuses - entries with these statuses are considered valid
+     * Note: We now also accept entries without explicit invalid status
      */
-    const VALID_STATUSES = ['VALID', 'VALIDADO', 'VALIDATED'];
+    const VALID_STATUSES = ['VALID', 'VALIDADO', 'VALIDATED', 'PENDING', ''];
+    const INVALID_STATUSES = ['INVALID', 'INVÁLIDO', 'REJECTED', 'CANCELLED'];
     
     /**
      * Prize tier names (3+ matches = winner)
@@ -72,12 +74,14 @@ window.WinnerCalculator = (function() {
 
     /**
      * Check if an entry has a valid status for winner consideration
+     * An entry is valid unless explicitly marked as invalid
      * @param {Object} entry - Entry object
      * @returns {boolean} True if valid
      */
     function isValidEntry(entry) {
         const status = (entry.status || '').toUpperCase();
-        return VALID_STATUSES.includes(status);
+        // Entry is valid unless explicitly marked as invalid
+        return !INVALID_STATUSES.includes(status);
     }
 
     // ============================================
