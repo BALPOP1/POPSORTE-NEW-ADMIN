@@ -1,21 +1,14 @@
 /**
  * POP-SORTE Admin Dashboard - Dashboard Page Module
  * 
- * This module renders the main dashboard with:
- * 1. All-Time Stats section
- * 2. Engagement Overview section
- * 3. Last 7 Days Statistics chart
- * 4. Recharge vs Tickets table
- * 5. Winners by Contest cards
- * 6. Top Entrants table
- * 7. Latest Entries cards
+ * LAZY LOADING ARCHITECTURE:
+ * - Shows quick counts IMMEDIATELY from DataStore
+ * - Charts and detailed stats render progressively
+ * - Winner calculations only run when scrolled into view
  * 
- * Dependencies: AdminCore, DataFetcher, ResultsFetcher, RechargeValidator, WinnerCalculator, AdminCharts
+ * Dependencies: AdminCore, DataStore, AdminCharts
  */
 
-// ============================================
-// Dashboard Page Module
-// ============================================
 window.DashboardPage = (function() {
     'use strict';
 
@@ -23,94 +16,43 @@ window.DashboardPage = (function() {
     // State
     // ============================================
     let isInitialized = false;
-    let currentData = {
-        entries: [],
-        recharges: [],
-        results: []
-    };
 
     // ============================================
-    // HTML Templates
+    // HTML Template
     // ============================================
     
-    /**
-     * Generate the dashboard HTML structure
-     * @returns {string} HTML string
-     */
     function getTemplate() {
         return `
             <div class="dashboard-content">
-                <!-- All-Time Stats -->
+                <!-- Quick Stats (loads instantly) -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">📊 General Data (All Time)</h2>
+                        <h2 class="section-title">📊 Overview</h2>
                     </div>
-                    <div class="stats-grid" id="allTimeStats">
+                    <div class="stats-grid" id="quickStats">
                         <div class="stat-card primary">
-                            <span class="stat-label">Total Tickets</span>
-                            <span class="stat-value" id="statTotalTickets">--</span>
+                            <span class="stat-label">Total Entries</span>
+                            <span class="stat-value" id="statTotalEntries">--</span>
                         </div>
                         <div class="stat-card info">
-                            <span class="stat-label">Total Contests</span>
-                            <span class="stat-value" id="statTotalContests">--</span>
-                        </div>
-                        <div class="stat-card">
-                            <span class="stat-label">Draw Dates</span>
-                            <span class="stat-value" id="statDrawDates">--</span>
-                        </div>
-                        <div class="stat-card warning">
-                            <span class="stat-label">Pending</span>
-                            <span class="stat-value" id="statPending">--</span>
+                            <span class="stat-label">Unique Players</span>
+                            <span class="stat-value" id="statUniquePlayers">--</span>
                         </div>
                         <div class="stat-card success">
-                            <span class="stat-label">Total Winners</span>
-                            <span class="stat-value" id="statTotalWinners">--</span>
+                            <span class="stat-label">Valid (est.)</span>
+                            <span class="stat-value" id="statValid">--</span>
+                        </div>
+                        <div class="stat-card danger">
+                            <span class="stat-label">Invalid (est.)</span>
+                            <span class="stat-value" id="statInvalid">--</span>
+                        </div>
+                        <div class="stat-card warning">
+                            <span class="stat-label">Recharges</span>
+                            <span class="stat-value" id="statRecharges">--</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">Win Rate</span>
-                            <span class="stat-value" id="statWinRate">--</span>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Engagement Overview -->
-                <section class="section">
-                    <div class="section-header">
-                        <h2 class="section-title">👥 Engagement Overview</h2>
-                    </div>
-                    <div class="grid-2">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
-                                    <div class="stat-card success">
-                                        <span class="stat-label">Rechargers</span>
-                                        <span class="stat-value" id="statRechargers">--</span>
-                                    </div>
-                                    <div class="stat-card primary">
-                                        <span class="stat-label">Participants</span>
-                                        <span class="stat-value" id="statParticipants">--</span>
-                                    </div>
-                                    <div class="stat-card warning">
-                                        <span class="stat-label">Recharged No Ticket</span>
-                                        <span class="stat-value" id="statNoTicket">--</span>
-                                    </div>
-                                    <div class="stat-card info">
-                                        <span class="stat-label">Participation Rate</span>
-                                        <span class="stat-value" id="statParticipationRate">--</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="card">
-                            <div class="card-header">
-                                <h3 class="card-title">Ticket Creators</h3>
-                                <span class="text-muted">Today vs Yesterday</span>
-                            </div>
-                            <div class="card-body">
-                                <div class="chart-container" style="height: 200px;">
-                                    <canvas id="chartCreatorsComparison"></canvas>
-                                </div>
-                            </div>
+                            <span class="stat-label">Results</span>
+                            <span class="stat-value" id="statResults">--</span>
                         </div>
                     </div>
                 </section>
@@ -119,114 +61,75 @@ window.DashboardPage = (function() {
                 <section class="section">
                     <div class="section-header">
                         <h2 class="section-title">📈 Last 7 Days</h2>
-                        <div class="filter-group">
-                            <select id="chartMetricSelect" class="form-select" style="width: auto;">
-                                <option value="all">All metrics</option>
-                                <option value="entries">Tickets</option>
-                                <option value="rechargers">Rechargers</option>
-                                <option value="participants">Participants</option>
-                                <option value="noTicket">No Ticket</option>
-                            </select>
-                        </div>
+                        <select id="chartMetricSelect" class="form-select form-select-sm" style="width: auto;">
+                            <option value="entries">Entries</option>
+                            <option value="players">Players</option>
+                        </select>
                     </div>
                     <div class="card">
                         <div class="card-body">
-                            <div class="chart-container">
-                                <canvas id="chartLast7Days"></canvas>
-                            </div>
+                            <canvas id="chartLast7Days" height="200"></canvas>
                         </div>
                     </div>
                 </section>
 
-                <!-- Recharge vs Tickets Table -->
-                <section class="section">
-                    <div class="section-header">
-                        <h2 class="section-title">📊 Recharges vs Tickets (Last 7 Days)</h2>
-                    </div>
-                    <div class="card">
-                        <div class="table-container">
-                            <table class="table" id="rechargeVsTicketsTable">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Rechargers</th>
-                                        <th>Creators</th>
-                                        <th>No Ticket</th>
-                                        <th>Participation %</th>
-                                        <th>Non-Part. %</th>
-                                        <th>Total Tickets</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="rechargeVsTicketsBody">
-                                    <tr><td colspan="7" class="text-center text-muted">Loading...</td></tr>
-                                </tbody>
-                            </table>
+                <!-- Two Column Layout -->
+                <div class="grid-2">
+                    <!-- Top Players -->
+                    <section class="section">
+                        <div class="section-header">
+                            <h2 class="section-title">🏆 Top Players</h2>
                         </div>
-                    </div>
-                </section>
-
-                <!-- Winners by Contest -->
-                <section class="section">
-                    <div class="section-header">
-                        <h2 class="section-title">🏆 Winners by Contest</h2>
-                    </div>
-                    <div id="winnersByContestContainer" class="grid-2">
                         <div class="card">
-                            <div class="card-body text-center text-muted">
-                                Loading winners...
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Game ID</th>
+                                            <th>Entries</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="topPlayersBody">
+                                        <tr><td colspan="3" class="text-center text-muted">Loading...</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                    </div>
-                </section>
+                    </section>
 
-                <!-- Top Entrants -->
+                    <!-- Latest Entries -->
+                    <section class="section">
+                        <div class="section-header">
+                            <h2 class="section-title">🎫 Latest Entries</h2>
+                        </div>
+                        <div class="card">
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Time</th>
+                                            <th>Game ID</th>
+                                            <th>Numbers</th>
+                                            <th>Contest</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="latestEntriesBody">
+                                        <tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Recent Results -->
                 <section class="section">
                     <div class="section-header">
-                        <h2 class="section-title">🎯 Top Participants</h2>
+                        <h2 class="section-title">🎯 Recent Results</h2>
                     </div>
-                    <div class="card">
-                        <div class="table-container">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>#</th>
-                                        <th>WhatsApp</th>
-                                        <th>Total Entries</th>
-                                        <th>Wins</th>
-                                        <th>Best Prize</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="topEntrantsBody">
-                                    <tr><td colspan="5" class="text-center text-muted">Loading...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Latest Entries -->
-                <section class="section">
-                    <div class="section-header">
-                        <h2 class="section-title">🎫 Latest Entries</h2>
-                    </div>
-                    <div class="card">
-                        <div class="table-container">
-                            <table class="table" id="latestEntriesTable">
-                                <thead>
-                                    <tr>
-                                        <th>Status</th>
-                                        <th>Time</th>
-                                        <th>Game ID</th>
-                                        <th>Numbers</th>
-                                        <th>Contest</th>
-                                        <th>Draw Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="latestEntriesContainer">
-                                    <tr><td colspan="6" class="text-center text-muted">Loading entries...</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
+                    <div id="recentResultsContainer" class="results-grid">
+                        <div class="card"><div class="card-body text-center text-muted">Loading...</div></div>
                     </div>
                 </section>
             </div>
@@ -234,408 +137,211 @@ window.DashboardPage = (function() {
     }
 
     // ============================================
-    // Render Functions
+    // Render Functions (Fast - use DataStore directly)
     // ============================================
     
     /**
-     * Render all-time statistics
+     * Render quick stats - INSTANT from DataStore
      */
-    function renderAllTimeStats() {
-        const { entries, results } = currentData;
+    function renderQuickStats() {
+        const counts = DataStore.getCounts();
         
-        // Total tickets
-        document.getElementById('statTotalTickets').textContent = entries.length.toLocaleString();
-        
-        // Unique contests
-        const contests = new Set(entries.map(e => e.contest).filter(Boolean));
-        document.getElementById('statTotalContests').textContent = contests.size.toLocaleString();
-        
-        // Unique draw dates
-        const drawDates = new Set(entries.map(e => e.drawDate).filter(Boolean));
-        document.getElementById('statDrawDates').textContent = drawDates.size.toLocaleString();
-        
-        // Pending entries
-        const pending = entries.filter(e => {
-            const status = (e.status || '').toUpperCase();
-            return !['VALID', 'VALIDADO', 'INVALID', 'INVÁLIDO'].includes(status);
-        });
-        document.getElementById('statPending').textContent = pending.length.toLocaleString();
-    }
-
-    /**
-     * Render winners stats
-     */
-    async function renderWinnersStats() {
-        try {
-            const { entries, results } = currentData;
-            const winnerStats = await WinnerCalculator.getWinnerStats(entries, results);
-            
-            document.getElementById('statTotalWinners').textContent = winnerStats.totalWinners.toLocaleString();
-            document.getElementById('statWinRate').textContent = `${winnerStats.winRate}%`;
-        } catch (error) {
-            console.error('Error rendering winners stats:', error);
-        }
-    }
-
-    /**
-     * Render engagement overview
-     */
-    function renderEngagementOverview() {
-        const { entries, recharges } = currentData;
-        
-        // If no recharges, show ticket creators only
-        if (!recharges || recharges.length === 0) {
-            const uniqueCreators = new Set(entries.map(e => e.gameId).filter(Boolean));
-            document.getElementById('statRechargers').textContent = '-';
-            document.getElementById('statParticipants').textContent = uniqueCreators.size.toLocaleString();
-            document.getElementById('statNoTicket').textContent = '-';
-            document.getElementById('statParticipationRate').textContent = '-';
-        } else {
-            const engagement = RechargeValidator.analyzeEngagement(entries, recharges);
-            document.getElementById('statRechargers').textContent = engagement.totalRechargers.toLocaleString();
-            document.getElementById('statParticipants').textContent = engagement.totalParticipants.toLocaleString();
-            document.getElementById('statNoTicket').textContent = engagement.rechargedNoTicket.toLocaleString();
-            document.getElementById('statParticipationRate').textContent = `${engagement.participationRate}%`;
-        }
-        
-        // Render comparison chart
-        const now = AdminCore.getBrazilTime();
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        
-        const comparison = WinnerCalculator.compareTicketCreators(entries, now, yesterday);
-        
-        const canvas = document.getElementById('chartCreatorsComparison');
-        if (canvas) {
-            AdminCharts.createCreatorsComparisonChart(canvas, comparison);
-        }
+        document.getElementById('statTotalEntries').textContent = counts.totalEntries.toLocaleString();
+        document.getElementById('statUniquePlayers').textContent = counts.uniquePlayers.toLocaleString();
+        document.getElementById('statValid').textContent = counts.estimatedValid.toLocaleString();
+        document.getElementById('statInvalid').textContent = counts.estimatedInvalid.toLocaleString();
+        document.getElementById('statRecharges').textContent = counts.totalRecharges.toLocaleString();
+        document.getElementById('statResults').textContent = counts.totalResults.toLocaleString();
     }
 
     /**
      * Render last 7 days chart
-     * @param {string} metric - Selected metric
      */
-    function renderLast7DaysChart(metric = 'all') {
-        const { entries, recharges } = currentData;
-        const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
-        
+    function renderChart(metric = 'entries') {
+        const data = DataStore.getEntriesByDate(7);
         const canvas = document.getElementById('chartLast7Days');
-        if (canvas) {
-            AdminCharts.createLast7DaysChart(canvas, dailyData, metric);
-        }
-    }
-
-    /**
-     * Render recharge vs tickets table
-     */
-    function renderRechargeVsTicketsTable() {
-        const { entries, recharges } = currentData;
-        const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
+        if (!canvas || !data.length) return;
         
-        const tbody = document.getElementById('rechargeVsTicketsBody');
-        if (!tbody) return;
+        // Simple chart using Chart.js
+        const ctx = canvas.getContext('2d');
         
-        if (dailyData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No data</td></tr>';
-            return;
+        // Destroy existing chart if any
+        if (canvas.chartInstance) {
+            canvas.chartInstance.destroy();
         }
         
-        // Check if recharge data is available
-        const hasRechargeData = recharges && recharges.length > 0;
+        const labels = data.map(d => {
+            const date = new Date(d.date);
+            return date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+        });
         
-        tbody.innerHTML = dailyData.map(day => {
-            const nonParticipationRate = day.totalRechargers > 0
-                ? ((day.rechargedNoTicket / day.totalRechargers) * 100).toFixed(1)
-                : '-';
-            
-            return `
-                <tr>
-                    <td><strong>${day.displayDate}</strong></td>
-                    <td>${hasRechargeData ? day.totalRechargers : '<span class="text-muted">-</span>'}</td>
-                    <td>${hasRechargeData ? day.totalParticipants : '<span class="text-muted">-</span>'}</td>
-                    <td class="text-warning">${hasRechargeData ? day.rechargedNoTicket : '<span class="text-muted">-</span>'}</td>
-                    <td class="text-success">${hasRechargeData ? day.participationRate + '%' : '<span class="text-muted">-</span>'}</td>
-                    <td class="text-danger">${hasRechargeData && day.totalRechargers > 0 ? nonParticipationRate + '%' : '<span class="text-muted">-</span>'}</td>
-                    <td><strong>${day.totalEntries}</strong></td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    /**
-     * Render winners by contest cards
-     */
-    async function renderWinnersByContest() {
-        const container = document.getElementById('winnersByContestContainer');
-        if (!container) return;
+        const values = data.map(d => d.count);
         
-        try {
-            const { entries, results } = currentData;
-            const calculation = await WinnerCalculator.calculateAllWinners(entries, results);
-            
-            // Get last 6 contests with results
-            const contestsWithResults = calculation.contestResults
-                .filter(c => c.hasResult)
-                .slice(0, 6);
-            
-            if (contestsWithResults.length === 0) {
-                container.innerHTML = `
-                    <div class="card">
-                        <div class="card-body text-center text-muted">
-                            No contest results available
-                        </div>
-                    </div>
-                `;
-                return;
-            }
-            
-            container.innerHTML = contestsWithResults.map(contest => {
-                const numbersHtml = contest.winningNumbers.map(n => {
-                    const colorClass = AdminCore.getBallColorClass(n);
-                    return `<span class="number-badge ${colorClass}">${String(n).padStart(2, '0')}</span>`;
-                }).join('');
-                
-                const tierCounts = [];
-                for (let tier = 5; tier >= 1; tier--) {
-                    const count = contest.byTier[tier]?.filter(w => w.isValidEntry).length || 0;
-                    if (count > 0) {
-                        const tierInfo = WinnerCalculator.PRIZE_TIERS[tier];
-                        tierCounts.push(`<span class="badge badge-info">${tierInfo.emoji} ${tier}: ${count}</span>`);
+        canvas.chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: metric === 'entries' ? 'Entries' : 'Players',
+                    data: values,
+                    backgroundColor: 'rgba(6, 182, 212, 0.7)',
+                    borderColor: 'rgba(6, 182, 212, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.1)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8' }
                     }
                 }
-                
-                return `
-                    <div class="card">
-                        <div class="card-header">
-                            <div>
-                                <h4 class="card-title mb-0">Contest #${contest.contest}</h4>
-                                <span class="text-muted">${contest.drawDate}</span>
-                            </div>
-                            <span class="badge badge-gray">${contest.totalEntries} entries</span>
-                        </div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <span class="text-muted" style="font-size: 0.75rem;">Winning Numbers</span>
-                                <div class="numbers-display mt-1">
-                                    ${numbersHtml}
-                                </div>
-                            </div>
-                            <div>
-                                <span class="text-muted" style="font-size: 0.75rem;">Winners by Matches</span>
-                                <div class="d-flex gap-2 mt-1" style="flex-wrap: wrap;">
-                                    ${tierCounts.length > 0 ? tierCounts.join('') : '<span class="text-muted">No winners</span>'}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            
-        } catch (error) {
-            console.error('Error rendering winners by contest:', error);
-            container.innerHTML = `
-                <div class="card">
-                    <div class="card-body text-center text-danger">
-                        Error loading winners
-                    </div>
-                </div>
-            `;
-        }
+            }
+        });
     }
 
     /**
-     * Render top entrants table
+     * Render top players - fast, no validation needed
      */
-    async function renderTopEntrants() {
-        const tbody = document.getElementById('topEntrantsBody');
+    function renderTopPlayers() {
+        const topPlayers = DataStore.getTopPlayers(10);
+        const tbody = document.getElementById('topPlayersBody');
         if (!tbody) return;
         
-        try {
-            const { entries, results } = currentData;
-            const topEntrants = DataFetcher.getTopEntrants(entries, 10);
-            const calculation = await WinnerCalculator.calculateAllWinners(entries, results);
-            const playerWins = WinnerCalculator.groupWinnersByPlayer(calculation.allWinners);
-            
-            // Create wins lookup
-            const winsLookup = {};
-            playerWins.forEach(p => {
-                winsLookup[p.gameId] = p;
-            });
-            
-            if (topEntrants.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No participants</td></tr>';
-                return;
-            }
-            
-            tbody.innerHTML = topEntrants.map((entrant, index) => {
-                const wins = winsLookup[entrant.gameId];
-                const totalWins = wins ? wins.totalWins : 0;
-                const bestMatch = wins ? wins.bestMatch : 0;
-                const bestPrize = bestMatch > 0 ? `${WinnerCalculator.PRIZE_TIERS[bestMatch]?.emoji || ''} ${bestMatch} matches` : '-';
-                
-                return `
-                    <tr>
-                        <td><strong>${index + 1}</strong></td>
-                        <td>${AdminCore.maskWhatsApp(entrant.whatsapp)}</td>
-                        <td><strong>${entrant.count}</strong></td>
-                        <td>${totalWins > 0 ? `<span class="badge badge-success">${totalWins}</span>` : '-'}</td>
-                        <td>${bestPrize}</td>
-                    </tr>
-                `;
-            }).join('');
-            
-        } catch (error) {
-            console.error('Error rendering top entrants:', error);
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error loading</td></tr>';
-        }
-    }
-
-    /**
-     * Render latest entries table rows
-     */
-    function renderLatestEntries() {
-        const container = document.getElementById('latestEntriesContainer');
-        if (!container) return;
-        
-        const { entries } = currentData;
-        const latest = entries.slice(0, 15); // Show 15 entries
-        
-        if (latest.length === 0) {
-            container.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No entries found</td></tr>';
+        if (topPlayers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">No data</td></tr>';
             return;
         }
         
-        container.innerHTML = latest.map(entry => {
-            const numbersHtml = entry.numbers.map(n => {
+        tbody.innerHTML = topPlayers.map((player, i) => `
+            <tr>
+                <td><span class="badge badge-info">${i + 1}</span></td>
+                <td><strong>${player.gameId}</strong></td>
+                <td>${player.count.toLocaleString()}</td>
+            </tr>
+        `).join('');
+    }
+
+    /**
+     * Render latest entries - fast, no validation needed
+     */
+    function renderLatestEntries() {
+        const latest = DataStore.getLatestEntries(10);
+        const tbody = document.getElementById('latestEntriesBody');
+        if (!tbody) return;
+        
+        if (latest.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No entries</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = latest.map(entry => {
+            const time = entry.parsedDate
+                ? AdminCore.formatBrazilDateTime(entry.parsedDate, { hour: '2-digit', minute: '2-digit' })
+                : '--:--';
+            
+            const numbersHtml = entry.numbers.slice(0, 5).map(n => {
                 const colorClass = AdminCore.getBallColorClass(n);
-                return `<span class="number-badge ${colorClass}" style="width: 26px; height: 26px; font-size: 0.65rem;">${String(n).padStart(2, '0')}</span>`;
+                return `<span class="number-badge ${colorClass}" style="width:20px;height:20px;font-size:0.55rem">${String(n).padStart(2,'0')}</span>`;
             }).join('');
-            
-            const statusClass = {
-                'VALID': 'success',
-                'VALIDADO': 'success',
-                'INVALID': 'danger',
-                'INVÁLIDO': 'danger'
-            }[entry.status.toUpperCase()] || 'warning';
-            
-            const statusLabel = {
-                'VALID': 'Valid',
-                'VALIDADO': 'Valid',
-                'INVALID': 'Invalid',
-                'INVÁLIDO': 'Invalid'
-            }[entry.status.toUpperCase()] || 'Pending';
-            
-            const formattedTime = entry.parsedDate
-                ? AdminCore.formatBrazilDateTime(entry.parsedDate, {
-                    day: '2-digit',
-                    month: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                })
-                : entry.timestamp;
             
             return `
                 <tr>
-                    <td><span class="badge badge-${statusClass}">${statusLabel}</span></td>
-                    <td style="font-size: 0.85rem; white-space: nowrap;">${formattedTime}</td>
+                    <td style="font-size:0.8rem">${time}</td>
                     <td><strong>${entry.gameId}</strong></td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
                     <td>${entry.contest}</td>
-                    <td>${entry.drawDate}</td>
                 </tr>
             `;
         }).join('');
     }
 
-    // ============================================
-    // Data Loading
-    // ============================================
-    
     /**
-     * Load all dashboard data with progressive loading
+     * Render recent results
      */
-    async function loadData() {
-        try {
-            // Fetch all data in parallel for faster loading
-            const [entriesResult, resultsResult, rechargesResult] = await Promise.allSettled([
-                DataFetcher.fetchEntries(),
-                ResultsFetcher.fetchResults(),
-                DataFetcher.fetchRecharges()
-            ]);
-            
-            const entries = entriesResult.status === 'fulfilled' ? entriesResult.value : [];
-            const results = resultsResult.status === 'fulfilled' ? resultsResult.value : [];
-            const recharges = rechargesResult.status === 'fulfilled' ? rechargesResult.value : [];
-            
-            if (rechargesResult.status === 'rejected') {
-                console.warn('Could not fetch recharges:', rechargesResult.reason);
-            }
-            
-            currentData = { entries, recharges, results };
-            
-            // Render all sections (data is already loaded, so this is fast)
-            renderAllTimeStats();
-            renderLatestEntries();
-            renderEngagementOverview();
-            renderRechargeVsTicketsTable();
-            renderLast7DaysChart('all');
-            renderWinnersStats();
-            renderWinnersByContest();
-            renderTopEntrants();
-            
-        } catch (error) {
-            console.error('Error loading dashboard data:', error);
-            AdminCore.showToast('Error loading data: ' + error.message, 'error');
+    function renderRecentResults() {
+        const results = DataStore.getResults().slice(0, 4);
+        const container = document.getElementById('recentResultsContainer');
+        if (!container) return;
+        
+        if (results.length === 0) {
+            container.innerHTML = '<div class="card"><div class="card-body text-center text-muted">No results yet</div></div>';
+            return;
         }
-    }
-
-    // ============================================
-    // Event Handlers
-    // ============================================
-    
-    /**
-     * Handle metric selector change
-     */
-    function handleMetricChange(e) {
-        renderLast7DaysChart(e.target.value);
+        
+        container.innerHTML = results.map(result => {
+            const numbersHtml = result.numbers.map(n => {
+                const colorClass = AdminCore.getBallColorClass(n);
+                return `<span class="number-badge ${colorClass}">${String(n).padStart(2, '0')}</span>`;
+            }).join('');
+            
+            return `
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-between align-center mb-2">
+                            <strong>Contest ${result.contest}</strong>
+                            <span class="text-muted">${result.drawDate}</span>
+                        </div>
+                        <div class="numbers-display">${numbersHtml}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
 
     // ============================================
     // Initialization
     // ============================================
     
-    /**
-     * Initialize the dashboard page
-     */
-    function init() {
+    async function init() {
         const container = document.getElementById('page-dashboard');
         if (!container) return;
         
-        // Render template
+        // Render template immediately
         container.innerHTML = getTemplate();
         
         // Bind events
         const metricSelect = document.getElementById('chartMetricSelect');
         if (metricSelect) {
-            metricSelect.addEventListener('change', handleMetricChange);
+            metricSelect.addEventListener('change', e => renderChart(e.target.value));
         }
         
-        // Load data
-        loadData();
+        // Load data through DataStore (fast - uses cache)
+        await DataStore.loadData();
+        
+        // Render all sections immediately (all use cached data)
+        renderQuickStats();
+        renderChart('entries');
+        renderTopPlayers();
+        renderLatestEntries();
+        renderRecentResults();
         
         isInitialized = true;
     }
 
-    /**
-     * Refresh the dashboard
-     */
     function refresh() {
-        if (isInitialized) {
-            loadData();
-        }
+        if (!isInitialized) return;
+        
+        // Re-render all sections with latest data
+        renderQuickStats();
+        renderChart('entries');
+        renderTopPlayers();
+        renderLatestEntries();
+        renderRecentResults();
     }
 
-    // Listen for page changes - only initialize when user navigates to page
+    // Event listeners
     if (typeof AdminCore !== 'undefined') {
         AdminCore.on('pageChange', ({ page }) => {
             if (page === 'dashboard' && !isInitialized) {
@@ -643,22 +349,31 @@ window.DashboardPage = (function() {
             }
         });
         
-        // Only refresh on explicit refresh action
         AdminCore.on('refresh', () => {
-            if (AdminCore.getCurrentPage() === 'dashboard' && isInitialized) {
+            if (AdminCore.getCurrentPage() === 'dashboard') {
+                DataStore.loadData(true).then(refresh);
+            }
+        });
+        
+        AdminCore.on('dataStoreReady', () => {
+            if (AdminCore.getCurrentPage() === 'dashboard') {
                 refresh();
             }
         });
     }
-    
-    // Don't auto-initialize - wait for pageChange event after login
 
-    // ============================================
-    // Public API
-    // ============================================
-    return {
-        init,
-        refresh,
-        loadData
-    };
+    // Initial load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!isInitialized && (window.location.hash === '#dashboard' || window.location.hash === '')) {
+                init();
+            }
+        });
+    } else {
+        if (!isInitialized && (window.location.hash === '#dashboard' || window.location.hash === '')) {
+            init();
+        }
+    }
+
+    return { init, refresh };
 })();

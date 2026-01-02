@@ -221,8 +221,9 @@ window.ResultsPage = (function() {
     
     async function loadData() {
         try {
-            // Fetch data - returns immediately if cached
-            results = await ResultsFetcher.fetchResults();
+            // Use DataStore for consistent caching
+            await DataStore.loadData();
+            results = DataStore.getResults();
             
             filteredResults = [...results];
             
