@@ -503,7 +503,12 @@ window.DataStore = (function() {
      */
     function getPlatformCounts(platform) {
         const entries = filterByPlatform(state.entries, platform);
-        const recharges = state.recharges; // Recharges are shared across platforms
+        
+        // Get platform-filtered recharges (only recharges for users in this platform)
+        const platformGameIds = new Set(entries.map(e => e.gameId).filter(Boolean));
+        const recharges = (!platform || platform === 'ALL') 
+            ? state.recharges 
+            : state.recharges.filter(r => r.gameId && platformGameIds.has(r.gameId));
         
         const playerIds = new Set();
         const rechargerIds = new Set();
@@ -533,7 +538,29 @@ window.DataStore = (function() {
         return filterByPlatform(state.entries, platform || AdminCore.getCurrentPlatform()); 
     }
     function getAllEntries() { return state.entries; }
-    function getRecharges() { return state.recharges; }
+    function getAllRecharges() { return state.recharges; }
+    
+    /**
+     * Get recharges filtered by platform
+     * Filters recharges to only those whose gameId exists in the platform-filtered entries
+     * @param {string} platform - Platform code (ALL, POPN1, POPLUZ)
+     * @returns {Object[]} Filtered recharges
+     */
+    function getRecharges(platform) {
+        const currentPlatform = platform || AdminCore.getCurrentPlatform();
+        
+        // If ALL platforms, return all recharges
+        if (!currentPlatform || currentPlatform === 'ALL') {
+            return state.recharges;
+        }
+        
+        // Get game IDs that belong to this platform
+        const platformEntries = filterByPlatform(state.entries, currentPlatform);
+        const platformGameIds = new Set(platformEntries.map(e => e.gameId).filter(Boolean));
+        
+        // Filter recharges to only those with game IDs from this platform
+        return state.recharges.filter(r => r.gameId && platformGameIds.has(r.gameId));
+    }
     function getResults() { return state.results; }
     function getCounts(platform) { 
         if (platform && platform !== 'ALL') {
@@ -709,6 +736,7 @@ window.DataStore = (function() {
         getEntries,
         getAllEntries,
         getRecharges,
+        getAllRecharges,
         getResults,
         getCounts,
 

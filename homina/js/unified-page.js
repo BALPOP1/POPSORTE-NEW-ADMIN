@@ -25,7 +25,8 @@ window.UnifiedPage = (function() {
     let currentData = {
         entries: [],
         allEntries: [],
-        recharges: [],
+        recharges: [],      // Platform-filtered recharges
+        allRecharges: [],   // All recharges (for validation)
         results: [],
         validationResults: null
     };
@@ -259,7 +260,7 @@ window.UnifiedPage = (function() {
     // ============================================
     
     async function renderEntries() {
-        const { entries, recharges, validationResults } = currentData;
+        const { entries, recharges, allRecharges, validationResults } = currentData;
         
         // Stats
         if (validationResults) {
@@ -267,17 +268,20 @@ window.UnifiedPage = (function() {
             document.getElementById('statInvalid').textContent = validationResults.stats.invalid.toLocaleString();
             document.getElementById('statCutoff').textContent = validationResults.stats.cutoff.toLocaleString();
         }
+        // Show platform-filtered recharge count
         document.getElementById('statRechargesCount').textContent = recharges.length.toLocaleString();
         
         // Validation banner
         const banner = document.getElementById('validationBanner');
+        const platform = AdminCore.getCurrentPlatform();
         if (banner) {
-            if (recharges.length === 0) {
+            if (allRecharges.length === 0) {
                 banner.className = 'status-banner warning';
                 banner.innerHTML = '<span class="status-banner-icon">⚠️</span><span class="status-banner-text">Recharge data not loaded.</span>';
             } else if (validationResults) {
                 banner.className = 'status-banner success';
-                banner.innerHTML = `<span class="status-banner-icon">✅</span><span class="status-banner-text">Validation complete. ${recharges.length} recharges processed.</span>`;
+                const platformNote = platform === 'ALL' ? '' : ` (${recharges.length} for ${platform})`;
+                banner.innerHTML = `<span class="status-banner-icon">✅</span><span class="status-banner-text">Validation complete. ${allRecharges.length} total recharges${platformNote}.</span>`;
             }
         }
         
@@ -746,15 +750,18 @@ window.UnifiedPage = (function() {
             
             const platform = AdminCore.getCurrentPlatform();
             
+            // Get platform-filtered data
             currentData.entries = DataStore.getEntries(platform);
             currentData.allEntries = DataStore.getAllEntries();
-            currentData.recharges = DataStore.getRecharges();
+            // IMPORTANT: Get platform-filtered recharges (only recharges for users in this platform)
+            currentData.recharges = DataStore.getRecharges(platform);
+            currentData.allRecharges = DataStore.getAllRecharges(); // For validation across all platforms
             currentData.results = DataStore.getResults();
             
-            // Validate entries
-            currentData.validationResults = await RechargeValidator.validateAllTickets(currentData.entries, currentData.recharges);
+            // Validate entries using ALL recharges (a user might have recharged on any platform)
+            currentData.validationResults = await RechargeValidator.validateAllTickets(currentData.entries, currentData.allRecharges);
             
-            console.log('UnifiedPage: Data loaded -', currentData.entries.length, 'entries');
+            console.log('UnifiedPage: Data loaded -', currentData.entries.length, 'entries,', currentData.recharges.length, 'recharges for platform:', platform);
             
             // Render all sections
             renderDashboard();
