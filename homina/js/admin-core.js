@@ -687,10 +687,15 @@ window.AdminCore = (function() {
         // Initial detection
         setTimeout(handleScrollDetection, 200);
 
-        // Handle hash on load
+        // Handle hash on load - clean up invalid hashes
         const hash = window.location.hash.slice(1).replace('section-', '');
-        if (hash && VALID_SECTIONS.includes(hash)) {
-            setTimeout(() => scrollToSection(hash), 100);
+        if (hash) {
+            if (VALID_SECTIONS.includes(hash)) {
+                setTimeout(() => scrollToSection(hash), 100);
+            } else {
+                // Invalid hash (like "undefined") - clean it up
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
         }
     }
 

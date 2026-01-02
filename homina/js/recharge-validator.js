@@ -336,17 +336,20 @@ window.RechargeValidator = (function() {
      * Validate all tickets with caching
      * @param {Object[]} entries - All entry objects
      * @param {Object[]} recharges - All recharge objects
+     * @param {boolean} skipCache - Skip cache check (for platform-filtered data)
      * @returns {Object} Validation results with statistics
      */
-    async function validateAllTickets(entries, recharges) {
-        // Check cache first
-        const cached = DataFetcher.getCachedValidation();
-        if (cached && cached.stats.total === entries.length) {
-            console.log('Using cached validation results');
-            return cached;
+    async function validateAllTickets(entries, recharges, skipCache = false) {
+        // Check cache first (only for ALL platform data, not filtered)
+        if (!skipCache) {
+            const cached = DataFetcher.getCachedValidation();
+            if (cached && cached.stats.total === entries.length && cached.entriesCount === entries.length) {
+                console.log('Using cached validation results');
+                return cached;
+            }
         }
         
-        console.log('Computing validation results...');
+        console.log('Computing validation results for', entries.length, 'entries...');
         
         // Group recharges by game ID
         const rechargesByGameId = {};

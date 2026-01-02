@@ -758,8 +758,10 @@ window.UnifiedPage = (function() {
             currentData.allRecharges = DataStore.getAllRecharges(); // For validation across all platforms
             currentData.results = DataStore.getResults();
             
-            // Validate entries using ALL recharges (a user might have recharged on any platform)
-            currentData.validationResults = await RechargeValidator.validateAllTickets(currentData.entries, currentData.allRecharges);
+            // Validate only the platform-filtered entries (using ALL recharges for validation lookup)
+            // Skip cache when platform is not ALL, since cached results are for all entries
+            const skipCache = platform !== 'ALL';
+            currentData.validationResults = await RechargeValidator.validateAllTickets(currentData.entries, currentData.allRecharges, skipCache);
             
             console.log('UnifiedPage: Data loaded -', currentData.entries.length, 'entries,', currentData.recharges.length, 'recharges for platform:', platform);
             
