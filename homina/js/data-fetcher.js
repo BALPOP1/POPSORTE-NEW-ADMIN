@@ -422,6 +422,24 @@ window.DataFetcher = (function() {
             }
 
             console.log(`Recharges parsed: ${recharges.length} valid, ${skippedRows} skipped`);
+            
+            // HARDCORE DEBUG: Show first 3 recharges in detail
+            if (recharges.length > 0) {
+                console.log('===== RECHARGE DATA INSPECTION =====');
+                recharges.slice(0, 3).forEach((r, i) => {
+                    console.log(`Recharge ${i + 1}:`, {
+                        gameId: r.gameId,
+                        rechargeId: r.rechargeId?.substring(0, 20),
+                        amount: r.amount,
+                        hasRechargeTime: !!r.rechargeTime,
+                        rechargeTimeIsDate: r.rechargeTime instanceof Date,
+                        rechargeTimeValid: r.rechargeTime instanceof Date ? !isNaN(r.rechargeTime.getTime()) : false,
+                        rechargeTimeString: r.rechargeTime ? r.rechargeTime.toString() : 'MISSING',
+                        rawRow: r.rawRow?.join(' | ')
+                    });
+                });
+                console.log('====================================');
+            }
 
             // Sort by timestamp descending
             recharges.sort((a, b) => {

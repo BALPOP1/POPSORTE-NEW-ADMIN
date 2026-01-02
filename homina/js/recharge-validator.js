@@ -182,6 +182,14 @@ window.RechargeValidator = (function() {
         // Sort by time descending (most recent first)
         eligibleRecharges.sort((a, b) => b.rechargeTime.getTime() - a.rechargeTime.getTime());
         
+        // HARDCORE DEBUG: First ticket matching
+        const isFirstTicket = ticket.ticketNumber && ticket.ticketNumber.includes('1°');
+        if (isFirstTicket && eligibleRecharges.length > 0) {
+            console.log('===== MATCHING FIRST TICKET =====');
+            console.log('Eligible recharges:', eligibleRecharges.length);
+            console.log('Ticket draw date:', ticketDrawDate);
+        }
+        
         // For each recharge, check if it's already used by another ticket
         for (const recharge of eligibleRecharges) {
             // Get eligible draw date for this recharge
@@ -208,10 +216,24 @@ window.RechargeValidator = (function() {
                 }
             }
             
+            // HARDCORE DEBUG: First ticket draw date comparison
+            if (isFirstTicket) {
+                console.log('Comparing draw dates:', {
+                    ticketDrawStr: ticketDrawStr,
+                    eligibleDrawStr: eligibleDrawStr,
+                    matches: ticketDrawStr === eligibleDrawStr,
+                    rechargeTime: recharge.rechargeTime,
+                    ticketTime: ticket.parsedDate
+                });
+            }
+            
             // Check if draw dates match
             if (ticketDrawStr !== eligibleDrawStr) {
+                if (isFirstTicket) console.log('DRAW DATE MISMATCH - skipping this recharge');
                 continue;
             }
+            
+            if (isFirstTicket) console.log('DRAW DATE MATCH! Checking if recharge already used...');
             
             // Check if this recharge is already used by a prior ticket
             const priorTickets = allTickets.filter(t => 
@@ -225,8 +247,12 @@ window.RechargeValidator = (function() {
             
             // If no prior tickets used this recharge, it's available
             if (priorTickets.length === 0) {
+                if (isFirstTicket) console.log('✅ MATCH FOUND! No prior tickets used this recharge');
+                if (isFirstTicket) console.log('====================================');
                 return recharge;
             }
+            
+            if (isFirstTicket) console.log(`Found ${priorTickets.length} prior tickets, checking if recharge already used...`);
             
             // Check if any prior ticket already claimed this recharge
             let rechargeUsed = false;
@@ -237,15 +263,20 @@ window.RechargeValidator = (function() {
                 const priorDrawStr = AdminCore.getBrazilDateString(priorEligibleDraw);
                 if (priorDrawStr === eligibleDrawStr) {
                     rechargeUsed = true;
+                    if (isFirstTicket) console.log('❌ Recharge already used by prior ticket');
                     break;
                 }
             }
             
             if (!rechargeUsed) {
+                if (isFirstTicket) console.log('✅ MATCH FOUND! Recharge not used by prior tickets');
+                if (isFirstTicket) console.log('====================================');
                 return recharge;
             }
         }
         
+        if (isFirstTicket) console.log('❌ NO MATCH FOUND after checking all recharges');
+        if (isFirstTicket) console.log('====================================');
         return null;
     }
 
@@ -294,6 +325,28 @@ window.RechargeValidator = (function() {
         const recharges = rechargesByGameId[gameId] || [];
         const tickets = ticketsByGameId[gameId] || [];
         
+        // HARDCORE DEBUG: Log first ticket validation
+        const isFirstTicket = ticket.ticketNumber && ticket.ticketNumber.includes('1°');
+        if (isFirstTicket) {
+            console.log('===== VALIDATING FIRST TICKET =====');
+            console.log('Ticket:', {
+                ticketNumber: ticket.ticketNumber,
+                gameId: gameId,
+                parsedDate: ticket.parsedDate,
+                timestamp: ticket.timestamp
+            });
+            console.log('Found recharges for this gameId:', recharges.length);
+            if (recharges.length > 0) {
+                console.log('First recharge for this player:', {
+                    gameId: recharges[0].gameId,
+                    amount: recharges[0].amount,
+                    rechargeTime: recharges[0].rechargeTime,
+                    isValidDate: recharges[0].rechargeTime instanceof Date && !isNaN(recharges[0].rechargeTime.getTime())
+                });
+            }
+            console.log('====================================');
+        }
+        
         if (recharges.length === 0) {
             result.status = ValidationStatus.INVALID;
             result.reason = 'No recharge found for Game ID: ' + gameId;
@@ -324,9 +377,28 @@ window.RechargeValidator = (function() {
             result.status = ValidationStatus.VALID;
             result.reason = `Matched recharge R$${matchedRecharge.amount || '?'}`;
             result.matchedRecharge = matchedRecharge;
+            
+            if (isFirstTicket) {
+                console.log('===== VALIDATION RESULT (FIRST TICKET) =====');
+                console.log('Status:', result.status);
+                console.log('Matched recharge:', {
+                    gameId: matchedRecharge.gameId,
+                    amount: matchedRecharge.amount,
+                    rechargeTime: matchedRecharge.rechargeTime,
+                    rechargeId: matchedRecharge.rechargeId?.substring(0, 30) + '...'
+                });
+                console.log('==========================================');
+            }
         } else {
             result.status = ValidationStatus.INVALID;
             result.reason = 'Recharge exists but timing does not match draw window';
+            
+            if (isFirstTicket) {
+                console.log('===== VALIDATION RESULT (FIRST TICKET) =====');
+                console.log('Status:', result.status);
+                console.log('Reason:', result.reason);
+                console.log('==========================================');
+            }
         }
         
         return result;
