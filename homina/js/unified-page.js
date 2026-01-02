@@ -360,6 +360,16 @@ window.UnifiedPage = (function() {
             return;
         }
         
+        console.log('🔍 RECHARGE DATA CHECK:');
+        console.log('   Total allRecharges:', currentData.allRecharges?.length || 0);
+        if (currentData.allRecharges && currentData.allRecharges.length > 0) {
+            console.log('   First recharge:', currentData.allRecharges[0]);
+            console.log('   First 3 gameIds:', currentData.allRecharges.slice(0, 3).map(r => r.gameId));
+        }
+        if (filteredEntries.length > 0) {
+            console.log('   First entry gameId:', filteredEntries[0].gameId);
+        }
+        
         const start = (entriesPage - 1) * entriesPerPage;
         const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
         
@@ -411,48 +421,65 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // RECHARGE INFO DISPLAY - Direct from CSV via matchedRecharge
+            // RECHARGE INFO - DIRECT MATCH BY GAME ID (FUCK THE VALIDATION SYSTEM)
             let rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">No recharge found</span>';
             
             try {
-                if (validation && validation.matchedRecharge) {
-                    const r = validation.matchedRecharge;
+                // Find recharge directly by matching gameId
+                const entryGameId = entry.gameId;
+                
+                if (entryGameId && currentData.allRecharges && currentData.allRecharges.length > 0) {
+                    // Find ALL recharges for this game ID
+                    const userRecharges = currentData.allRecharges.filter(r => r.gameId === entryGameId);
                     
-                    // ORDER NUMBER from CSV (Column 1)
-                    const orderNumber = r.rechargeId || '';
-                    const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
-                    
-                    // CHARGE AMOUNT from CSV (Column 8)
-                    const chargeAmount = r.amount || 0;
-                    const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
-                    
-                    // TIME from CSV (Column 5)
-                    let timeDisplay = '-';
-                    if (r.rechargeTime && r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
-                        try {
+                    if (userRecharges.length > 0) {
+                        // Get the most recent recharge (recharges are sorted by time descending)
+                        const r = userRecharges[0];
+                        
+                        // ORDER NUMBER from CSV (Column 1)
+                        const orderNumber = r.rechargeId || '';
+                        const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
+                        
+                        // CHARGE AMOUNT from CSV (Column 8)
+                        const chargeAmount = r.amount || 0;
+                        const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
+                        
+                        // TIME from CSV (Column 5)
+                        let timeDisplay = '-';
+                        if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
                             timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
                                 day: '2-digit', 
                                 month: '2-digit', 
                                 hour: '2-digit', 
                                 minute: '2-digit' 
                             });
-                        } catch (e) {
-                            timeDisplay = r.rechargeTimeRaw || '-';
+                        } else if (r.rechargeTimeRaw) {
+                            timeDisplay = r.rechargeTimeRaw;
                         }
-                    } else if (r.rechargeTimeRaw) {
-                        timeDisplay = r.rechargeTimeRaw;
+                        
+                        rechargeInfo = `
+                            <div class="recharge-details">
+                                <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
+                                <div class="recharge-time">${timeDisplay}</div>
+                                <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
+                            </div>
+                        `;
+                        
+                        // Debug first entry with recharge
+                        if (index === 0 && userRecharges.length > 0) {
+                            console.log('💰 RECHARGE FOUND FOR FIRST ENTRY:');
+                            console.log('   Game ID:', entryGameId);
+                            console.log('   Order#:', orderNumber);
+                            console.log('   Amount:', chargeAmount);
+                            console.log('   Time:', timeDisplay);
+                            console.log('   Total recharges for this user:', userRecharges.length);
+                        }
+                    } else if (index === 0) {
+                        console.log('❌ NO RECHARGE for gameId:', entryGameId);
                     }
-                    
-                    rechargeInfo = `
-                        <div class="recharge-details">
-                            <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
-                            <div class="recharge-time">${timeDisplay}</div>
-                            <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
-                        </div>
-                    `;
                 }
             } catch (error) {
-                console.error('Error rendering recharge info:', error);
+                console.error('❌ ERROR getting recharge info:', error);
                 rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">Error loading recharge</span>';
             }
             
@@ -541,54 +568,65 @@ window.UnifiedPage = (function() {
             return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
         }).join('');
         
-        // RECHARGE INFORMATION - Direct from validation matchedRecharge
-        let rechargeHtml = '<p class="text-muted">No linked recharge found</p>';
+        // RECHARGE INFORMATION - DIRECT MATCH BY GAME ID
+        let rechargeHtml = '<p class="text-muted">No recharge found for this Game ID</p>';
         
-        if (validation?.matchedRecharge) {
-            const r = validation.matchedRecharge;
+        // Find recharge directly by matching gameId
+        const entryGameId = entry.gameId;
+        if (entryGameId && currentData.allRecharges && currentData.allRecharges.length > 0) {
+            const userRecharges = currentData.allRecharges.filter(r => r.gameId === entryGameId);
             
-            // ORDER NUMBER
-            const orderNumber = r.rechargeId || '-';
-            
-            // CHARGE AMOUNT
-            const chargeAmount = r.amount || 0;
-            const amountDisplay = chargeAmount > 0 ? `R$ ${chargeAmount.toFixed(2)}` : 'R$ 0.00';
-            
-            // TIME
-            let timeDisplay = '-';
-            if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
-                timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
-                    day: '2-digit', 
-                    month: '2-digit', 
-                    year: 'numeric', 
-                    hour: '2-digit', 
-                    minute: '2-digit', 
-                    second: '2-digit' 
+            if (userRecharges.length > 0) {
+                // Show ALL recharges for this user
+                rechargeHtml = '<div class="mb-3">';
+                
+                userRecharges.slice(0, 5).forEach((r, idx) => {
+                    const orderNumber = r.rechargeId || '-';
+                    const chargeAmount = r.amount || 0;
+                    const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
+                    
+                    let timeDisplay = '-';
+                    if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                        timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: 'numeric', 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            second: '2-digit' 
+                        });
+                    } else if (r.rechargeTimeRaw) {
+                        timeDisplay = r.rechargeTimeRaw;
+                    }
+                    
+                    rechargeHtml += `
+                        <div class="ticket-info-grid mb-3" style="border-bottom: 1px solid var(--border-primary); padding-bottom: 12px;">
+                            <div class="ticket-info-item">
+                                <span class="label">💰 Amount ${idx === 0 ? '(Latest)' : ''}</span>
+                                <span class="value text-success"><strong>${amountDisplay}</strong></span>
+                            </div>
+                            <div class="ticket-info-item">
+                                <span class="label">📋 Order Number</span>
+                                <span class="value" style="font-size:0.7rem;word-break:break-all">${orderNumber}</span>
+                            </div>
+                            <div class="ticket-info-item">
+                                <span class="label">⏰ Recharge Time</span>
+                                <span class="value">${timeDisplay}</span>
+                            </div>
+                            <div class="ticket-info-item">
+                                <span class="label">🎮 Game ID</span>
+                                <span class="value">${r.gameId}</span>
+                            </div>
+                        </div>
+                    `;
                 });
-            } else if (r.rechargeTimeRaw) {
-                timeDisplay = r.rechargeTimeRaw;
+                
+                if (userRecharges.length > 5) {
+                    rechargeHtml += `<p class="text-muted text-center">... and ${userRecharges.length - 5} more recharges</p>`;
+                }
+                
+                rechargeHtml += '</div>';
             }
-            
-            rechargeHtml = `
-                <div class="ticket-info-grid">
-                    <div class="ticket-info-item">
-                        <span class="label">💰 Charge Amount</span>
-                        <span class="value text-success"><strong>${amountDisplay}</strong></span>
-                    </div>
-                    <div class="ticket-info-item">
-                        <span class="label">📋 Order Number</span>
-                        <span class="value" style="font-size:0.7rem;word-break:break-all">${orderNumber}</span>
-                    </div>
-                    <div class="ticket-info-item">
-                        <span class="label">⏰ Recharge Time</span>
-                        <span class="value">${timeDisplay}</span>
-                    </div>
-                    <div class="ticket-info-item">
-                        <span class="label">🎮 Game ID</span>
-                        <span class="value">${r.gameId || entry.gameId || '-'}</span>
-                    </div>
-                </div>
-            `;
         }
         
         modalContent.innerHTML = `
