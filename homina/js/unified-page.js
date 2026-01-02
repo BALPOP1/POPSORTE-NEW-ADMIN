@@ -275,12 +275,21 @@ window.UnifiedPage = (function() {
             });
         }
         
-        // Stats
-        if (validationResults) {
-            document.getElementById('statValid').textContent = validationResults.stats.valid.toLocaleString();
-            document.getElementById('statInvalid').textContent = validationResults.stats.invalid.toLocaleString();
-            document.getElementById('statCutoff').textContent = validationResults.stats.cutoff.toLocaleString();
-        }
+        // Stats - ✅ COUNT DIRECTLY FROM CSV STATUS COLUMN
+        const validCount = entries.filter(e => {
+            const status = (e.status || '').toUpperCase();
+            return status === 'VALID' || status === 'VÁLIDO';
+        }).length;
+        
+        const invalidCount = entries.filter(e => {
+            const status = (e.status || '').toUpperCase();
+            return status === 'INVALID' || status === 'INVÁLIDO';
+        }).length;
+        
+        document.getElementById('statValid').textContent = validCount.toLocaleString();
+        document.getElementById('statInvalid').textContent = invalidCount.toLocaleString();
+        document.getElementById('statCutoff').textContent = '0'; // No cutoff tracking from CSV
+        
         // Show platform-filtered recharge count
         document.getElementById('statRechargesCount').textContent = recharges.length.toLocaleString();
         
@@ -341,9 +350,11 @@ window.UnifiedPage = (function() {
         }
         if (entriesFilters.validity !== 'all') {
             result = result.filter(e => {
-                const validation = validationMap.get(e.ticketNumber);
-                const status = validation?.status || 'UNKNOWN';
-                return entriesFilters.validity === 'valid' ? status === 'VALID' : status === 'INVALID';
+                // ✅ READ STATUS DIRECTLY FROM CSV (Column H - STATUS)
+                const csvStatus = (e.status || 'UNKNOWN').toUpperCase();
+                const isValid = csvStatus === 'VALID' || csvStatus === 'VÁLIDO';
+                const isInvalid = csvStatus === 'INVALID' || csvStatus === 'INVÁLIDO';
+                return entriesFilters.validity === 'valid' ? isValid : isInvalid;
             });
         }
         
@@ -382,30 +393,30 @@ window.UnifiedPage = (function() {
         
         try {
             tbody.innerHTML = pageEntries.map((entry, index) => {
-            // Get validation from map (simple and fast)
-            const validation = validationMap.get(entry.ticketNumber);
-            const status = validation?.status || 'UNKNOWN';
-            const isCutoff = validation?.isCutoff || false;
+            // ✅ READ STATUS DIRECTLY FROM CSV (Column H - STATUS)
+            const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
+            const status = csvStatus;
             
             // Debug ONLY first entry to avoid performance issues
             if (index === 0) {
                 console.log('🎯 FIRST ENTRY:', entry.gameId, entry.ticketNumber);
-                console.log('   Validation:', !!validation, 'Status:', status);
-                console.log('   Has recharge:', !!validation?.matchedRecharge);
-                if (validation?.matchedRecharge) {
-                    console.log('   ✅ Recharge:', validation.matchedRecharge.rechargeId?.substring(0, 20), 'Amount:', validation.matchedRecharge.amount);
-                }
+                console.log('   CSV Status:', entry.status);
+                console.log('   Parsed Status:', status);
             }
             
-            // Status badge with cutoff indicator
+            // Status badge based on CSV column
             let statusBadge = '';
             switch (status) {
-                case 'VALID': statusBadge = '<span class="badge badge-success">✅ VALID</span>'; break;
-                case 'INVALID': statusBadge = '<span class="badge badge-danger">❌ INVALID</span>'; break;
-                default: statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
-            }
-            if (isCutoff) {
-                statusBadge += ' <span class="badge badge-warning" style="margin-left:4px">⚠️ CUTOFF</span>';
+                case 'VALID':
+                case 'VÁLIDO':
+                    statusBadge = '<span class="badge badge-success">✅ VALID</span>';
+                    break;
+                case 'INVALID':
+                case 'INVÁLIDO':
+                    statusBadge = '<span class="badge badge-danger">❌ INVALID</span>';
+                    break;
+                default:
+                    statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
             }
             
             // Format date/time
@@ -541,26 +552,22 @@ window.UnifiedPage = (function() {
         const entry = currentData.entries.find(e => e.ticketNumber === ticketNumber);
         if (!entry) return;
         
-        // Get validation from map
-        const validation = validationMap.get(ticketNumber);
-        
         const modalContent = document.getElementById('ticketModalContent');
         if (!modalContent) return;
         
-        // Validation status banner
-        let statusHtml = '';
-        if (validation) {
-            const status = validation.status;
-            const isCutoff = validation.isCutoff || false;
-            const statusClass = { 'VALID': 'success', 'INVALID': 'danger' }[status] || 'warning';
-            statusHtml = `<div class="status-banner ${statusClass} mb-4">
-                <span class="status-banner-icon">${status === 'VALID' ? '✅' : status === 'INVALID' ? '❌' : '⏳'}</span>
-                <span class="status-banner-text">
-                    <strong>${status}</strong> - ${validation.reason || 'Checking...'}
-                    ${isCutoff ? '<br><span class="text-warning">⚠️ Registered after 20:00 BRT cutoff</span>' : ''}
-                </span>
-            </div>`;
-        }
+        // ✅ VALIDATION STATUS - READ DIRECTLY FROM CSV (Column H - STATUS)
+        const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
+        const status = csvStatus;
+        const statusClass = { 'VALID': 'success', 'INVALID': 'danger', 'VÁLIDO': 'success', 'INVÁLIDO': 'danger' }[csvStatus] || 'warning';
+        const statusIcon = (status === 'VALID' || status === 'VÁLIDO') ? '✅' : (status === 'INVALID' || status === 'INVÁLIDO') ? '❌' : '⏳';
+        const statusText = (status === 'VALID' || status === 'VÁLIDO') ? 'VALID' : (status === 'INVALID' || status === 'INVÁLIDO') ? 'INVALID' : 'PENDING';
+        
+        const statusHtml = `<div class="status-banner ${statusClass} mb-4">
+            <span class="status-banner-icon">${statusIcon}</span>
+            <span class="status-banner-text">
+                <strong>${statusText}</strong> - Status from CSV
+            </span>
+        </div>`;
         
         // Render number badges
         const numbersHtml = entry.numbers.map(n => {
@@ -686,9 +693,10 @@ window.UnifiedPage = (function() {
         
         const headers = ['Status', 'Date/Time', 'Platform', 'Game ID', 'Numbers', 'Contest', 'Ticket #'];
         const rows = filteredEntries.map(entry => {
-            const validation = validationMap.get(entry.ticketNumber);
+            // ✅ READ STATUS DIRECTLY FROM CSV (Column H - STATUS)
+            const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
             return [
-                validation?.status || 'UNKNOWN',
+                csvStatus,
                 entry.timestamp,
                 entry.platform,
                 entry.gameId,
