@@ -407,7 +407,7 @@ window.EntriesPage = (function() {
                 <tr>
                     <td>${statusBadge}</td>
                     <td style="font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
-                    <td><span class="badge badge-info">${entry.platform}</span></td>
+                    <td><span class="platform-badge ${(entry.platform || 'POPN1').toLowerCase()}">${entry.platform || 'POPN1'}</span></td>
                     <td><strong>${entry.gameId}</strong></td>
                     <td>${AdminCore.maskWhatsApp(entry.whatsapp)}</td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
@@ -652,7 +652,9 @@ window.EntriesPage = (function() {
             // Use DataStore for cached data
             await DataStore.loadData();
             
-            const entries = DataStore.getEntries();
+            // Get platform-filtered entries
+            const platform = AdminCore.getCurrentPlatform();
+            const entries = DataStore.getEntries(platform);
             const recharges = DataStore.getRecharges();
             
             // Validate all tickets using RechargeValidator
@@ -753,6 +755,14 @@ window.EntriesPage = (function() {
         AdminCore.on('refresh', () => {
             if (AdminCore.getCurrentPage() === 'entries' && isInitialized) {
                 refresh();
+            }
+        });
+        
+        // Listen for platform changes
+        AdminCore.on('platformChange', ({ platform }) => {
+            if (AdminCore.getCurrentPage() === 'entries' && isInitialized) {
+                console.log('Entries: Platform changed to', platform);
+                loadData();
             }
         });
     }

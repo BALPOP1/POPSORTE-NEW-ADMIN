@@ -27,14 +27,27 @@ window.WinnerCalculator = (function() {
     // ============================================
     
     /**
-     * Total prize pool per contest (R$)
+     * Default prize pool per contest (R$)
+     * Can be overridden per platform via AdminCore.getPlatformPrize()
      */
-    const PRIZE_POOL = 1000;
+    const DEFAULT_PRIZE_POOL = 1000;
     
     /**
      * Minimum matches to qualify as a winner (3+ matches = winner)
      */
     const MIN_MATCHES_TO_WIN = 3;
+
+    /**
+     * Get prize pool for a platform
+     * @param {string} platform - Platform code
+     * @returns {number} Prize pool amount
+     */
+    function getPrizePool(platform) {
+        if (typeof AdminCore !== 'undefined' && AdminCore.getPlatformPrize) {
+            return AdminCore.getPlatformPrize(platform);
+        }
+        return DEFAULT_PRIZE_POOL;
+    }
     
     /**
      * Valid entry statuses - entries with these statuses are considered valid
@@ -92,9 +105,10 @@ window.WinnerCalculator = (function() {
      * Calculate winners for a single contest
      * @param {Object[]} entries - Entries for this contest
      * @param {Object} result - Result object with winning numbers
+     * @param {string} platform - Platform code for prize calculation
      * @returns {Object} Winners calculation result
      */
-    function calculateContestWinners(entries, result) {
+    function calculateContestWinners(entries, result, platform = 'POPN1') {
         if (!result || result.isNoDraw || result.numbers.length !== 5) {
             return {
                 contest: result?.contest || 'Unknown',
@@ -105,13 +119,16 @@ window.WinnerCalculator = (function() {
                 winners: [],
                 byTier: {},
                 prizePerWinner: 0,
-                winningTier: 0
+                winningTier: 0,
+                prizePool: getPrizePool(platform),
+                platform: platform
             };
         }
         
         const winningNumbers = result.numbers;
         const winners = [];
         const byTier = { 5: [], 4: [], 3: [], 2: [], 1: [] };
+        const prizePool = getPrizePool(platform);
         
         // Process each entry
         entries.forEach(entry => {
@@ -152,12 +169,14 @@ window.WinnerCalculator = (function() {
             }
         }
         
-        // Calculate prize per winner
+        // Calculate prize per winner (prize goes to highest tier only)
         let prizePerWinner = 0;
+        let totalPrizeAwarded = 0;
         if (winningTier > 0) {
             const tierWinners = byTier[winningTier].filter(w => w.isValidEntry);
             if (tierWinners.length > 0) {
-                prizePerWinner = PRIZE_POOL / tierWinners.length;
+                prizePerWinner = prizePool / tierWinners.length;
+                totalPrizeAwarded = prizePool;
             }
         }
         
@@ -172,7 +191,10 @@ window.WinnerCalculator = (function() {
             byTier: byTier,
             winningTier: winningTier,
             prizePerWinner: prizePerWinner,
-            tierInfo: PRIZE_TIERS[winningTier] || null
+            prizePool: prizePool,
+            totalPrizeAwarded: totalPrizeAwarded,
+            tierInfo: PRIZE_TIERS[winningTier] || null,
+            platform: platform
         };
     }
 
@@ -180,22 +202,30 @@ window.WinnerCalculator = (function() {
      * Calculate winners for all contests with caching
      * @param {Object[]} entries - All entries
      * @param {Object[]} results - All results
+     * @param {string} platform - Platform code for prize calculation
      * @returns {Object} Complete winners calculation
      */
-    async function calculateAllWinners(entries, results) {
-        // Check cache first
+    async function calculateAllWinners(entries, results, platform = 'ALL') {
+        // Check cache first (include platform in cache key)
+        const cacheKey = `${DataFetcher.simpleHash(entries)}-${DataFetcher.simpleHash(results)}-${platform}`;
         if (DataFetcher.isWinnersCacheValid(entries, results)) {
             const cached = DataFetcher.getCachedWinners();
-            if (cached) {
+            if (cached && cached.platform === platform) {
                 console.log('Using cached winner calculations');
                 return cached;
             }
         }
         
-        console.log('Computing winner calculations...');
+        console.log('Computing winner calculations for platform:', platform);
+        
+        // Filter entries by platform if not ALL
+        let filteredEntries = entries;
+        if (platform && platform !== 'ALL' && typeof DataStore !== 'undefined') {
+            filteredEntries = DataStore.filterByPlatform(entries, platform);
+        }
         
         // Group entries by contest
-        const entriesByContest = DataFetcher.groupEntriesByContest(entries);
+        const entriesByContest = DataFetcher.groupEntriesByContest(filteredEntries);
         
         // Create results lookup map
         const resultsMap = new Map();
@@ -205,6 +235,10 @@ window.WinnerCalculator = (function() {
             }
         });
         
+        // Determine the effective platform for prize calculation
+        const effectivePlatform = platform === 'ALL' ? 'DEFAULT' : platform;
+        const prizePool = getPrizePool(effectivePlatform);
+        
         // Calculate winners for each contest
         const contestResults = [];
         const allWinners = [];
@@ -213,7 +247,9 @@ window.WinnerCalculator = (function() {
             contestsWithWinners: 0,
             byTier: { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 },
             totalWinners: 0,
-            totalPrizeAwarded: 0
+            totalPrizeAwarded: 0,
+            platform: platform,
+            prizePool: prizePool
         };
         
         const contestKeys = Object.keys(entriesByContest);
@@ -225,7 +261,7 @@ window.WinnerCalculator = (function() {
             for (const contest of batch) {
                 const contestEntries = entriesByContest[contest];
                 const result = resultsMap.get(contest);
-                const contestWinners = calculateContestWinners(contestEntries, result);
+                const contestWinners = calculateContestWinners(contestEntries, result, effectivePlatform);
                 
                 contestResults.push(contestWinners);
                 
@@ -234,7 +270,7 @@ window.WinnerCalculator = (function() {
                     
                     if (contestWinners.winningTier > 0) {
                         stats.contestsWithWinners++;
-                        stats.totalPrizeAwarded += PRIZE_POOL;
+                        stats.totalPrizeAwarded += contestWinners.totalPrizeAwarded || prizePool;
                     }
                     
                     // Count by tier (only valid entries)
@@ -266,7 +302,8 @@ window.WinnerCalculator = (function() {
         const result = {
             contestResults,
             allWinners,
-            stats
+            stats,
+            platform
         };
         
         // Cache the results
@@ -287,15 +324,22 @@ window.WinnerCalculator = (function() {
      * Get summary statistics for winners
      * @param {Object[]} entries - All entries
      * @param {Object[]} results - All results
+     * @param {string} platform - Platform code
      * @returns {Object} Summary stats
      */
-    async function getWinnerStats(entries, results) {
-        const calculation = await calculateAllWinners(entries, results);
+    async function getWinnerStats(entries, results, platform = 'ALL') {
+        const calculation = await calculateAllWinners(entries, results, platform);
+        
+        // Use filtered entries count for win rate
+        let filteredEntriesCount = entries.length;
+        if (platform && platform !== 'ALL' && typeof DataStore !== 'undefined') {
+            filteredEntriesCount = DataStore.filterByPlatform(entries, platform).length;
+        }
         
         return {
             ...calculation.stats,
-            winRate: entries.length > 0 
-                ? ((calculation.stats.totalWinners / entries.length) * 100).toFixed(2)
+            winRate: filteredEntriesCount > 0 
+                ? ((calculation.stats.totalWinners / filteredEntriesCount) * 100).toFixed(2)
                 : 0
         };
     }
@@ -500,6 +544,7 @@ window.WinnerCalculator = (function() {
         isValidEntry,
         calculateContestWinners,
         calculateAllWinners,
+        getPrizePool,
         
         // Statistics
         getWinnerStats,
@@ -512,7 +557,7 @@ window.WinnerCalculator = (function() {
         getTicketCreatorsByDay,
         
         // Constants
-        PRIZE_POOL,
+        DEFAULT_PRIZE_POOL,
         MIN_MATCHES_TO_WIN,
         VALID_STATUSES,
         PRIZE_TIERS

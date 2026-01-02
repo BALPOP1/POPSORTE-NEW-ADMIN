@@ -264,8 +264,11 @@ window.WinnersPage = (function() {
     // Data Loading - ON DEMAND
     // ============================================
     
-    async function calculateWinners() {
-        if (winnersCalculated && allWinners.length > 0) {
+    async function calculateWinners(forceRecalculate = false) {
+        const platform = AdminCore.getCurrentPlatform();
+        
+        // Check if we can use cached results for this platform
+        if (!forceRecalculate && winnersCalculated && allWinners.length > 0 && calculation?.platform === platform) {
             // Use cached calculation
             return;
         }
@@ -277,7 +280,7 @@ window.WinnersPage = (function() {
         
         try {
             // Get data from DataStore
-            const entries = DataStore.getEntries();
+            const entries = DataStore.getEntries(platform);
             const results = DataStore.getResults();
             
             if (entries.length === 0 || results.length === 0) {
@@ -285,10 +288,12 @@ window.WinnersPage = (function() {
                 await DataStore.loadData();
             }
             
-            // Calculate winners (this is the heavy operation - only done once)
+            // Calculate winners (this is the heavy operation)
+            // Pass platform for platform-specific prize calculation
             calculation = await WinnerCalculator.calculateAllWinners(
-                DataStore.getEntries(),
-                DataStore.getResults()
+                DataStore.getEntries(platform),
+                DataStore.getResults(),
+                platform
             );
             
             allWinners = calculation.allWinners || [];
@@ -361,6 +366,14 @@ window.WinnersPage = (function() {
         AdminCore.on('refresh', () => {
             if (AdminCore.getCurrentPage() === 'winners') {
                 DataStore.loadData(true).then(() => refresh());
+            }
+        });
+        
+        // Listen for platform changes
+        AdminCore.on('platformChange', ({ platform }) => {
+            if (AdminCore.getCurrentPage() === 'winners' && isInitialized) {
+                console.log('Winners: Platform changed to', platform);
+                calculateWinners(true); // Force recalculate for new platform
             }
         });
     }

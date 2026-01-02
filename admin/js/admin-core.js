@@ -24,11 +24,29 @@ window.AdminCore = (function() {
     const REFRESH_INTERVAL = 180 * 1000; // 3 minutes (extended for performance)
     const VALID_PAGES = ['dashboard', 'entries', 'results', 'winners'];
     const DEFAULT_PAGE = 'dashboard';
+    
+    /**
+     * Available platforms - detected from entries data
+     * 'ALL' shows combined data with platform breakdown
+     */
+    const PLATFORMS = ['ALL', 'POPN1', 'POPLUZ'];
+    const DEFAULT_PLATFORM = 'ALL';
+    
+    /**
+     * Platform-specific prize pools (R$)
+     * Can be configured per platform
+     */
+    const PLATFORM_PRIZES = {
+        'POPN1': 1000,
+        'POPLUZ': 1000,
+        'DEFAULT': 1000
+    };
 
     // ============================================
     // State
     // ============================================
     let currentPage = null;
+    let currentPlatform = DEFAULT_PLATFORM;
     let refreshTimer = null;
     let isRefreshing = false;
     let isPageLoading = false;
@@ -477,6 +495,78 @@ window.AdminCore = (function() {
     }
 
     // ============================================
+    // Platform Management
+    // ============================================
+    
+    /**
+     * Get current platform
+     * @returns {string} Current platform code
+     */
+    function getCurrentPlatform() {
+        return currentPlatform;
+    }
+
+    /**
+     * Set current platform and emit change event
+     * @param {string} platform - Platform code (ALL, POPN1, POPLUZ)
+     */
+    function setCurrentPlatform(platform) {
+        if (!PLATFORMS.includes(platform)) {
+            platform = DEFAULT_PLATFORM;
+        }
+        
+        if (platform === currentPlatform) return;
+        
+        currentPlatform = platform;
+        
+        // Update platform switcher UI
+        updatePlatformSwitcherUI();
+        
+        // Emit platform change event
+        emit('platformChange', { platform });
+        
+        console.log('Platform changed to:', platform);
+    }
+
+    /**
+     * Get prize pool for a specific platform
+     * @param {string} platform - Platform code
+     * @returns {number} Prize pool amount in R$
+     */
+    function getPlatformPrize(platform) {
+        return PLATFORM_PRIZES[platform] || PLATFORM_PRIZES.DEFAULT;
+    }
+
+    /**
+     * Update platform switcher button states
+     */
+    function updatePlatformSwitcherUI() {
+        document.querySelectorAll('.platform-btn').forEach(btn => {
+            const isActive = btn.dataset.platform === currentPlatform;
+            btn.classList.toggle('active', isActive);
+        });
+        
+        // Update page title with platform indicator
+        const pageTitle = document.getElementById('pageTitle');
+        const platformIndicator = document.getElementById('platformIndicator');
+        if (platformIndicator) {
+            platformIndicator.textContent = currentPlatform === 'ALL' ? '' : `[${currentPlatform}]`;
+        }
+    }
+
+    /**
+     * Initialize platform switcher
+     */
+    function initPlatformSwitcher() {
+        document.querySelectorAll('.platform-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setCurrentPlatform(btn.dataset.platform);
+            });
+        });
+        updatePlatformSwitcherUI();
+    }
+
+    // ============================================
     // Router
     // ============================================
     
@@ -749,6 +839,7 @@ window.AdminCore = (function() {
         if (isAuthenticated()) {
             showApp();
             initRouter();
+            initPlatformSwitcher();
             startAutoRefresh();
             updateLastRefreshDisplay();
         } else {
@@ -781,6 +872,11 @@ window.AdminCore = (function() {
         // Router
         navigateTo,
         getCurrentPage: () => currentPage,
+        
+        // Platform management
+        getCurrentPlatform,
+        setCurrentPlatform,
+        getPlatformPrize,
         
         // UI
         showApp,
@@ -817,7 +913,10 @@ window.AdminCore = (function() {
         
         // Constants
         VALID_PAGES,
-        DEFAULT_PAGE
+        DEFAULT_PAGE,
+        PLATFORMS,
+        DEFAULT_PLATFORM,
+        PLATFORM_PRIZES
     };
 })();
 

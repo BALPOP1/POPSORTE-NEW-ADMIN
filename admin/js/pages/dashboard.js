@@ -2,15 +2,18 @@
  * POP-SORTE Admin Dashboard - Dashboard Page Module
  * 
  * This module renders the main dashboard with:
- * 1. All-Time Stats section
+ * 1. All-Time Stats section (with platform breakdown)
  * 2. Engagement Overview section
- * 3. Last 7 Days Statistics chart
- * 4. Recharge vs Tickets table
- * 5. Winners by Contest cards
- * 6. Top Entrants table
- * 7. Latest Entries table
+ * 3. 7-Day Ticket Creators chart
+ * 4. Last 7 Days Statistics chart
+ * 5. Recharge vs Tickets table
+ * 6. Winners by Contest cards (with prize info)
+ * 7. Top Entrants table
+ * 8. Latest Entries table
  * 
- * Dependencies: AdminCore, DataFetcher, ResultsFetcher, RechargeValidator, WinnerCalculator, AdminCharts
+ * Supports platform filtering (ALL, POPN1, POPLUZ)
+ * 
+ * Dependencies: AdminCore, DataFetcher, DataStore, ResultsFetcher, RechargeValidator, WinnerCalculator, AdminCharts
  */
 
 window.DashboardPage = (function() {
@@ -23,7 +26,8 @@ window.DashboardPage = (function() {
     let currentData = {
         entries: [],
         recharges: [],
-        results: []
+        results: [],
+        allEntries: [] // Unfiltered entries for platform breakdown
     };
 
     // ============================================
@@ -37,6 +41,7 @@ window.DashboardPage = (function() {
                 <section class="section">
                     <div class="section-header">
                         <h2 class="section-title">📊 General Data (All Time)</h2>
+                        <span id="platformStatsLabel" class="badge badge-info"></span>
                     </div>
                     <div class="stats-grid" id="allTimeStats">
                         <div class="stat-card primary">
@@ -62,6 +67,21 @@ window.DashboardPage = (function() {
                         <div class="stat-card">
                             <span class="stat-label">Win Rate</span>
                             <span class="stat-value" id="statWinRate">--</span>
+                        </div>
+                    </div>
+                    <!-- Platform Breakdown (shown in ALL view) -->
+                    <div id="platformBreakdown" class="platform-breakdown" style="display: none;">
+                        <div class="platform-breakdown-item">
+                            <span class="platform-name">
+                                <span class="platform-badge popn1">🎰 POPN1</span>
+                            </span>
+                            <span class="platform-value" id="statPOPN1Tickets">--</span>
+                        </div>
+                        <div class="platform-breakdown-item">
+                            <span class="platform-name">
+                                <span class="platform-badge popluz">💡 POPLUZ</span>
+                            </span>
+                            <span class="platform-value" id="statPOPLUZTickets">--</span>
                         </div>
                     </div>
                 </section>
@@ -96,12 +116,12 @@ window.DashboardPage = (function() {
                         </div>
                         <div class="card">
                             <div class="card-header">
-                                <h3 class="card-title">Ticket Creators</h3>
-                                <span class="text-muted">Today vs Yesterday</span>
+                                <h3 class="card-title">🎫 Ticket Creators (7 Days)</h3>
+                                <span class="text-muted">Unique creators per day</span>
                             </div>
                             <div class="card-body">
-                                <div class="chart-container" style="height: 150px;">
-                                    <canvas id="chartCreatorsComparison"></canvas>
+                                <div class="chart-container" style="height: 180px;">
+                                    <canvas id="chartTicketCreators7Day"></canvas>
                                 </div>
                             </div>
                         </div>
@@ -161,6 +181,7 @@ window.DashboardPage = (function() {
                 <section class="section">
                     <div class="section-header">
                         <h2 class="section-title">🏆 Winners by Contest</h2>
+                        <span id="prizePoolLabel" class="badge badge-warning"></span>
                     </div>
                     <div class="grid-3" id="winnersByContestContainer">
                         <div class="card"><div class="card-body text-center text-muted">Loading...</div></div>
@@ -205,12 +226,13 @@ window.DashboardPage = (function() {
                                         <tr>
                                             <th>Time</th>
                                             <th>Game ID</th>
+                                            <th>Platform</th>
                                             <th>Numbers</th>
                                             <th>Contest</th>
                                         </tr>
                                     </thead>
                                     <tbody id="latestEntriesContainer">
-                                        <tr><td colspan="4" class="text-center text-muted">Loading...</td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted">Loading...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -226,8 +248,23 @@ window.DashboardPage = (function() {
     // ============================================
     
     function renderAllTimeStats() {
-        const { entries, results } = currentData;
+        const { entries, allEntries } = currentData;
+        const platform = AdminCore.getCurrentPlatform();
         
+        // Update platform label
+        const platformLabel = document.getElementById('platformStatsLabel');
+        if (platformLabel) {
+            platformLabel.textContent = platform === 'ALL' ? 'All Platforms' : platform;
+            platformLabel.className = `badge badge-${platform === 'ALL' ? 'info' : platform === 'POPN1' ? 'primary' : 'warning'}`;
+        }
+        
+        // Show/hide platform breakdown
+        const breakdownEl = document.getElementById('platformBreakdown');
+        if (breakdownEl) {
+            breakdownEl.style.display = platform === 'ALL' ? 'grid' : 'none';
+        }
+        
+        // Stats for current view
         document.getElementById('statTotalTickets').textContent = entries.length.toLocaleString();
         
         const contests = new Set(entries.map(e => e.contest).filter(Boolean));
@@ -241,12 +278,20 @@ window.DashboardPage = (function() {
             return !['VALID', 'VALIDADO', 'INVALID', 'INVÁLIDO'].includes(status);
         });
         document.getElementById('statPending').textContent = pending.length.toLocaleString();
+        
+        // Platform breakdown (only in ALL view)
+        if (platform === 'ALL' && allEntries.length > 0) {
+            const breakdown = DataStore.getEntriesByPlatform(allEntries);
+            document.getElementById('statPOPN1Tickets').textContent = breakdown.POPN1.count.toLocaleString() + ' tickets';
+            document.getElementById('statPOPLUZTickets').textContent = breakdown.POPLUZ.count.toLocaleString() + ' tickets';
+        }
     }
 
     async function renderWinnersStats() {
         try {
             const { entries, results } = currentData;
-            const winnerStats = await WinnerCalculator.getWinnerStats(entries, results);
+            const platform = AdminCore.getCurrentPlatform();
+            const winnerStats = await WinnerCalculator.getWinnerStats(entries, results, platform);
             
             document.getElementById('statTotalWinners').textContent = winnerStats.totalWinners.toLocaleString();
             document.getElementById('statWinRate').textContent = `${winnerStats.winRate}%`;
@@ -272,16 +317,17 @@ window.DashboardPage = (function() {
             document.getElementById('statParticipationRate').textContent = `${engagement.participationRate}%`;
         }
         
-        // Render comparison chart
-        const now = AdminCore.getBrazilTime();
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
+        // Render 7-day ticket creators chart
+        renderTicketCreators7DayChart();
+    }
+
+    function renderTicketCreators7DayChart() {
+        const { entries } = currentData;
+        const dailyData = WinnerCalculator.getTicketCreatorsByDay(entries, 7);
         
-        const comparison = WinnerCalculator.compareTicketCreators(entries, now, yesterday);
-        
-        const canvas = document.getElementById('chartCreatorsComparison');
+        const canvas = document.getElementById('chartTicketCreators7Day');
         if (canvas) {
-            AdminCharts.createCreatorsComparisonChart(canvas, comparison);
+            AdminCharts.createTicketCreators7DayChart(canvas, dailyData);
         }
     }
 
@@ -334,7 +380,16 @@ window.DashboardPage = (function() {
         
         try {
             const { entries, results } = currentData;
-            const calculation = await WinnerCalculator.calculateAllWinners(entries, results);
+            const platform = AdminCore.getCurrentPlatform();
+            const prizePool = WinnerCalculator.getPrizePool(platform === 'ALL' ? 'DEFAULT' : platform);
+            
+            // Update prize pool label
+            const prizeLabel = document.getElementById('prizePoolLabel');
+            if (prizeLabel) {
+                prizeLabel.textContent = `Prize Pool: R$ ${prizePool.toLocaleString()}`;
+            }
+            
+            const calculation = await WinnerCalculator.calculateAllWinners(entries, results, platform);
             
             const contestsWithResults = calculation.contestResults
                 .filter(c => c.hasResult)
@@ -353,11 +408,20 @@ window.DashboardPage = (function() {
                 
                 const tierCounts = [];
                 for (let tier = 5; tier >= 3; tier--) {
-                    const count = contest.byTier[tier]?.length || 0;
+                    const count = contest.byTier[tier]?.filter(w => w.isValidEntry).length || 0;
                     if (count > 0) {
                         const emoji = tier === 5 ? '🏆' : tier === 4 ? '🥈' : '🥉';
                         tierCounts.push(`<span class="badge badge-${tier === 5 ? 'warning' : tier === 4 ? 'info' : 'success'}">${emoji} ${tier}: ${count}</span>`);
                     }
+                }
+                
+                // Calculate prize info for winning tier
+                let prizeInfo = '';
+                if (contest.winningTier > 0 && contest.prizePerWinner > 0) {
+                    const winnerCount = contest.byTier[contest.winningTier]?.filter(w => w.isValidEntry).length || 0;
+                    prizeInfo = `<div class="text-success mt-2" style="font-size: 0.8rem;">
+                        💰 R$ ${contest.prizePerWinner.toFixed(2)} per winner (${winnerCount} winner${winnerCount > 1 ? 's' : ''})
+                    </div>`;
                 }
                 
                 return `
@@ -370,6 +434,7 @@ window.DashboardPage = (function() {
                             <div class="numbers-display mb-2" style="justify-content: center;">${numbersHtml}</div>
                             <div class="text-center">
                                 ${tierCounts.length > 0 ? tierCounts.join(' ') : '<span class="text-muted">No winners</span>'}
+                                ${prizeInfo}
                             </div>
                         </div>
                     </div>
@@ -411,7 +476,7 @@ window.DashboardPage = (function() {
         if (!tbody) return;
         
         if (latest.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No entries</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No entries</td></tr>';
             return;
         }
         
@@ -425,10 +490,14 @@ window.DashboardPage = (function() {
                 return `<span class="number-badge ${colorClass}" style="width:22px;height:22px;font-size:0.6rem">${String(n).padStart(2,'0')}</span>`;
             }).join('');
             
+            const platform = (entry.platform || 'POPN1').toUpperCase();
+            const platformClass = platform === 'POPLUZ' ? 'popluz' : 'popn1';
+            
             return `
                 <tr>
                     <td style="font-size:0.85rem">${time}</td>
                     <td><strong>${entry.gameId}</strong></td>
+                    <td><span class="platform-badge ${platformClass}">${platform}</span></td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
                     <td>${entry.contest}</td>
                 </tr>
@@ -445,11 +514,15 @@ window.DashboardPage = (function() {
             // Use DataStore for cached data
             await DataStore.loadData();
             
-            const entries = DataStore.getEntries();
+            const platform = AdminCore.getCurrentPlatform();
+            
+            // Get filtered entries based on platform
+            const entries = DataStore.getEntries(platform);
+            const allEntries = DataStore.getAllEntries();
             const results = DataStore.getResults();
             const recharges = DataStore.getRecharges();
             
-            currentData = { entries, recharges, results };
+            currentData = { entries, allEntries, recharges, results };
             
             // Render all sections
             renderAllTimeStats();
@@ -514,6 +587,14 @@ window.DashboardPage = (function() {
         AdminCore.on('dataStoreReady', () => {
             if (AdminCore.getCurrentPage() === 'dashboard' && isInitialized) {
                 refresh();
+            }
+        });
+        
+        // Listen for platform changes
+        AdminCore.on('platformChange', ({ platform }) => {
+            if (AdminCore.getCurrentPage() === 'dashboard' && isInitialized) {
+                console.log('Dashboard: Platform changed to', platform);
+                loadData();
             }
         });
     }

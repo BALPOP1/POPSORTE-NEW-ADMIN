@@ -302,10 +302,141 @@ a:hover {
     color: var(--text-primary);
 }
 
+.topbar-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+}
+
 .topbar-right {
     display: flex;
     align-items: center;
     gap: 16px;
+}
+
+/* ============================================
+   Platform Switcher
+   ============================================ */
+.platform-switcher {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg-tertiary);
+    padding: 4px;
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-primary);
+}
+
+.platform-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--border-radius);
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+}
+
+.platform-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.platform-btn.active {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: var(--bg-primary);
+    border-color: var(--primary);
+    box-shadow: var(--shadow-glow);
+}
+
+.platform-btn .platform-icon {
+    font-size: 1rem;
+}
+
+.platform-btn .platform-name {
+    font-weight: 600;
+}
+
+.platform-indicator {
+    color: var(--primary);
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+/* Platform-specific colors */
+.platform-btn[data-platform="POPN1"].active {
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    border-color: #8b5cf6;
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+}
+
+.platform-btn[data-platform="POPLUZ"].active {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border-color: #f59e0b;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+}
+
+/* Platform badge styles */
+.platform-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.platform-badge.popn1 {
+    background: rgba(139, 92, 246, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.platform-badge.popluz {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Platform breakdown cards */
+.platform-breakdown {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-primary);
+}
+
+.platform-breakdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-primary);
+}
+
+.platform-breakdown-item .platform-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.platform-breakdown-item .platform-value {
+    font-weight: 700;
+    color: var(--text-primary);
 }
 
 .refresh-status {
@@ -1477,6 +1608,39 @@ a:hover {
     
     .topbar {
         padding: 0 16px;
+        flex-wrap: wrap;
+        height: auto;
+        min-height: var(--topbar-height);
+        gap: 8px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+    
+    .topbar-left {
+        order: 1;
+    }
+    
+    .topbar-center {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .topbar-right {
+        order: 2;
+    }
+    
+    .platform-switcher {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .platform-btn .platform-name {
+        display: none;
+    }
+    
+    .platform-btn {
+        padding: 8px 12px;
     }
     
     .page-container {

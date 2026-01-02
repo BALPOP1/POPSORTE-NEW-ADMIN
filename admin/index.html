@@ -89,7 +89,24 @@
                     <span></span>
                 </button>
                 <div class="topbar-left">
-                    <h1 id="pageTitle">Dashboard</h1>
+                    <h1 id="pageTitle">Dashboard <span id="platformIndicator" class="platform-indicator"></span></h1>
+                </div>
+                <div class="topbar-center">
+                    <!-- Platform Switcher -->
+                    <div class="platform-switcher">
+                        <button class="platform-btn active" data-platform="ALL" title="All Platforms Combined">
+                            <span class="platform-icon">🌐</span>
+                            <span class="platform-name">ALL</span>
+                        </button>
+                        <button class="platform-btn" data-platform="POPN1" title="POPN1 Platform">
+                            <span class="platform-icon">🎰</span>
+                            <span class="platform-name">POPN1</span>
+                        </button>
+                        <button class="platform-btn" data-platform="POPLUZ" title="POPLUZ Platform">
+                            <span class="platform-icon">💡</span>
+                            <span class="platform-name">POPLUZ</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="topbar-right">
                     <div class="refresh-status">

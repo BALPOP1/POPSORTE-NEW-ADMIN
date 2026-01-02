@@ -298,6 +298,82 @@ window.AdminCharts = (function() {
     }
 
     // ============================================
+    // 7-Day Ticket Creators Line Chart
+    // ============================================
+    
+    /**
+     * Create 7-day ticket creators line chart
+     * @param {HTMLCanvasElement} canvas - Canvas element
+     * @param {Object[]} dailyData - Array of daily ticket creator data
+     * @returns {Chart} Chart instance
+     */
+    function createTicketCreators7DayChart(canvas, dailyData) {
+        // Reverse data to show oldest first (left to right)
+        const data = [...dailyData].reverse();
+        
+        const labels = data.map(d => d.displayDate || d.weekday || d.date);
+        
+        const config = {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Unique Ticket Creators',
+                        data: data.map(d => d.uniqueCreators || 0),
+                        borderColor: colors.primary,
+                        backgroundColor: colors.primaryLight,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: colors.primary,
+                        borderWidth: 3
+                    },
+                    {
+                        label: 'Total Tickets',
+                        data: data.map(d => d.totalTickets || 0),
+                        borderColor: colors.info,
+                        backgroundColor: 'transparent',
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        borderDash: [5, 5],
+                        borderWidth: 2
+                    }
+                ]
+            },
+            options: {
+                ...defaultOptions,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    ...defaultOptions.plugins,
+                    tooltip: {
+                        ...defaultOptions.plugins.tooltip,
+                        callbacks: {
+                            afterBody: function(context) {
+                                const index = context[0].dataIndex;
+                                const dayData = data[index];
+                                if (dayData && dayData.totalTickets && dayData.uniqueCreators) {
+                                    const avgPerCreator = (dayData.totalTickets / dayData.uniqueCreators).toFixed(1);
+                                    return `Avg tickets/creator: ${avgPerCreator}`;
+                                }
+                                return '';
+                            }
+                        }
+                    }
+                }
+            }
+        };
+        
+        return createChart('ticketCreators7Day', canvas, config);
+    }
+
+    // ============================================
     // Winners by Tier Doughnut Chart
     // ============================================
     
@@ -496,6 +572,7 @@ window.AdminCharts = (function() {
         // Chart creation
         createLast7DaysChart,
         createCreatorsComparisonChart,
+        createTicketCreators7DayChart,
         createWinnersTierChart,
         createDailyTicketsChart,
         createParticipationGauge,

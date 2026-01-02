@@ -410,13 +410,93 @@ window.DataStore = (function() {
     }
 
     // ============================================
+    // Platform Filtering
+    // ============================================
+
+    /**
+     * Filter entries by platform
+     * @param {Object[]} entries - All entries
+     * @param {string} platform - Platform code (ALL, POPN1, POPLUZ)
+     * @returns {Object[]} Filtered entries
+     */
+    function filterByPlatform(entries, platform) {
+        if (!platform || platform === 'ALL') {
+            return entries;
+        }
+        return entries.filter(e => (e.platform || 'POPN1').toUpperCase() === platform.toUpperCase());
+    }
+
+    /**
+     * Get entries grouped by platform with counts
+     * @param {Object[]} entries - All entries
+     * @returns {Object} Platform breakdown { POPN1: { count, entries }, POPLUZ: { count, entries } }
+     */
+    function getEntriesByPlatform(entries) {
+        const breakdown = {
+            POPN1: { count: 0, entries: [] },
+            POPLUZ: { count: 0, entries: [] }
+        };
+        
+        entries.forEach(e => {
+            const platform = (e.platform || 'POPN1').toUpperCase();
+            if (breakdown[platform]) {
+                breakdown[platform].count++;
+                breakdown[platform].entries.push(e);
+            } else {
+                // Default to POPN1 if unknown platform
+                breakdown.POPN1.count++;
+                breakdown.POPN1.entries.push(e);
+            }
+        });
+        
+        return breakdown;
+    }
+
+    /**
+     * Get platform-filtered counts
+     * @param {string} platform - Platform code
+     * @returns {Object} Counts for the platform
+     */
+    function getPlatformCounts(platform) {
+        const entries = filterByPlatform(state.entries, platform);
+        const recharges = state.recharges; // Recharges are shared across platforms
+        
+        const playerIds = new Set();
+        const rechargerIds = new Set();
+        
+        entries.forEach(e => {
+            if (e.gameId) playerIds.add(e.gameId);
+        });
+        
+        recharges.forEach(r => {
+            if (r.gameId) rechargerIds.add(r.gameId);
+        });
+        
+        return {
+            totalEntries: entries.length,
+            uniquePlayers: playerIds.size,
+            totalRecharges: recharges.length,
+            uniqueRechargers: rechargerIds.size,
+            totalResults: state.results.length
+        };
+    }
+
+    // ============================================
     // Getters
     // ============================================
 
-    function getEntries() { return state.entries; }
+    function getEntries(platform) { 
+        return filterByPlatform(state.entries, platform || AdminCore.getCurrentPlatform()); 
+    }
+    function getAllEntries() { return state.entries; }
     function getRecharges() { return state.recharges; }
     function getResults() { return state.results; }
-    function getCounts() { return state.counts; }
+    function getCounts(platform) { 
+        if (platform && platform !== 'ALL') {
+            return getPlatformCounts(platform);
+        }
+        return state.counts; 
+    }
     function isLoaded() { return state.loaded; }
     function isLoading() { return state.loading; }
 
@@ -583,9 +663,15 @@ window.DataStore = (function() {
 
         // Raw data getters
         getEntries,
+        getAllEntries,
         getRecharges,
         getResults,
         getCounts,
+
+        // Platform filtering
+        filterByPlatform,
+        getEntriesByPlatform,
+        getPlatformCounts,
 
         // Paginated/filtered getters
         getEntriesPage,
