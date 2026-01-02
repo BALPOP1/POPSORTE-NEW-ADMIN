@@ -374,9 +374,9 @@ a:hover {
 
 /* Platform Logo Images */
 .platform-btn .platform-logo-img {
-    height: 28px;
+    height: 38px;
     width: auto;
-    max-width: 120px;
+    max-width: 150px;
     display: block;
     object-fit: contain;
     pointer-events: none;
@@ -1704,8 +1704,8 @@ a:hover {
     }
     
     .platform-btn .platform-logo-img {
-        height: 24px;
-        max-width: 80px;
+        height: 32px;
+        max-width: 100px;
     }
     
     .page-container {
