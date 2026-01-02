@@ -563,16 +563,31 @@ window.AdminCore = (function() {
         
         buttons.forEach(btn => {
             const platform = btn.dataset.platform;
+            if (!platform) {
+                console.warn('Platform button missing data-platform attribute');
+                return;
+            }
             
-            btn.addEventListener('click', (e) => {
+            // Remove any existing listeners by cloning
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
+            // Add click handler
+            newBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Platform button clicked:', platform);
-                setCurrentPlatform(platform);
-            });
+                console.log('Platform button clicked:', this.dataset.platform);
+                setCurrentPlatform(this.dataset.platform);
+            }, false);
+            
+            // Also handle mousedown for immediate feedback
+            newBtn.addEventListener('mousedown', function(e) {
+                e.stopPropagation();
+            }, false);
         });
         
         updatePlatformSwitcherUI();
+        console.log('Platform switcher initialized, current platform:', currentPlatform);
     }
 
     // ============================================
@@ -609,22 +624,27 @@ window.AdminCore = (function() {
 
     /**
      * Handle scroll to detect active section
+     * Uses getBoundingClientRect which works regardless of scroll container
      */
-    const handleScroll = throttle(() => {
+    function handleScrollDetection() {
         const sections = VALID_SECTIONS.map(name => ({
             name,
             el: document.getElementById(`section-${name}`)
         })).filter(s => s.el);
 
-        const scrollTop = window.scrollY || document.documentElement.scrollTop;
+        if (sections.length === 0) return;
+
+        // Use viewport-relative positioning
         const viewportHeight = window.innerHeight;
-        const triggerPoint = scrollTop + viewportHeight * 0.3;
+        const triggerPoint = viewportHeight * 0.35; // 35% from top of viewport
 
         let activeSection = DEFAULT_SECTION;
+        
+        // Find the section that is currently most visible
         for (const section of sections) {
             const rect = section.el.getBoundingClientRect();
-            const sectionTop = scrollTop + rect.top;
-            if (sectionTop <= triggerPoint) {
+            // If section top is above trigger point (in view), it becomes active
+            if (rect.top <= triggerPoint) {
                 activeSection = section.name;
             }
         }
@@ -632,7 +652,10 @@ window.AdminCore = (function() {
         if (activeSection !== currentSection) {
             updateActiveNavLink(activeSection);
         }
-    }, 100);
+    }
+
+    // Throttled scroll handler
+    const handleScroll = throttle(handleScrollDetection, 100);
 
     /**
      * Initialize scroll navigation
@@ -651,13 +674,18 @@ window.AdminCore = (function() {
             });
         });
 
-        // Listen for scroll to update active nav
+        // Listen for scroll on the page container (where scrolling actually happens)
         const pageContainer = document.getElementById('pageContainer');
         if (pageContainer) {
-            pageContainer.addEventListener('scroll', handleScroll);
-        } else {
-            window.addEventListener('scroll', handleScroll);
+            pageContainer.addEventListener('scroll', handleScroll, { passive: true });
+            console.log('Scroll listener attached to pageContainer');
         }
+        
+        // Also listen on window for edge cases
+        window.addEventListener('scroll', handleScroll, { passive: true });
+
+        // Initial detection
+        setTimeout(handleScrollDetection, 200);
 
         // Handle hash on load
         const hash = window.location.hash.slice(1).replace('section-', '');

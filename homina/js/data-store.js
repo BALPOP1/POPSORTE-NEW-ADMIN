@@ -19,8 +19,8 @@ window.DataStore = (function() {
     // Constants
     // ============================================
     const STORAGE_KEY = 'popsorte_admin_data';
-    const STORAGE_VERSION = 5; // Bumped to fix caching bugs
-    const STORAGE_TTL = 3 * 60 * 1000; // 3 minutes localStorage cache (reduced for fresher data)
+    const STORAGE_VERSION = 6; // Bumped to fix caching bugs - always fetch fresh on load
+    const STORAGE_TTL = 2 * 60 * 1000; // 2 minutes localStorage cache (reduced for fresher data)
     const MIN_RECHARGE_AMOUNT = 1.0;
 
     // ============================================
@@ -241,36 +241,48 @@ window.DataStore = (function() {
 
     /**
      * Initial load - fetches all data once
-     * Shows cached data immediately, then refreshes in background
-     * @param {boolean} forceRefresh - Force network refresh
+     * Shows cached data immediately, then ALWAYS refreshes from network
+     * @param {boolean} forceRefresh - Force network refresh (bypasses cache check)
      * @returns {Promise<Object>} Current counts
      */
     async function loadData(forceRefresh = false) {
         // If already loading, return current state
         if (state.loading) {
+            console.log('DataStore: Already loading, returning current counts');
             return state.counts;
         }
 
-        // Try localStorage first for instant display
-        if (!state.loaded && loadFromStorage()) {
-            state.loaded = true;
-            AdminCore.emit('dataStoreReady', { fromCache: true, counts: state.counts });
+        // Track if this is the first load
+        const isFirstLoad = !state.loaded;
+        
+        // Try localStorage first for IMMEDIATE display only (not as final data)
+        if (isFirstLoad) {
+            const hasCache = loadFromStorage();
+            if (hasCache) {
+                console.log('DataStore: Showing cached data immediately, will refresh from network');
+                AdminCore.emit('dataStoreReady', { fromCache: true, counts: state.counts });
+            }
         }
 
-        // Check if we need fresh data
+        // ALWAYS fetch from network on first load, or if forceRefresh, or if cache expired
         const now = Date.now();
-        if (!forceRefresh && state.loaded && (now - state.lastFetch) < DataFetcher.CACHE_TTL) {
+        const cacheExpired = (now - state.lastFetch) >= DataFetcher.CACHE_TTL;
+        const shouldFetchFromNetwork = isFirstLoad || forceRefresh || cacheExpired;
+        
+        if (!shouldFetchFromNetwork && state.loaded) {
+            console.log('DataStore: Using existing data (cache still valid)');
             return state.counts;
         }
 
+        console.log('DataStore: Fetching fresh data from network...');
         state.loading = true;
 
         try {
-            // Fetch all data in parallel
+            // Fetch all data in parallel - ALWAYS force refresh on first load
             const [entries, recharges, results] = await Promise.all([
-                DataFetcher.fetchEntries(forceRefresh),
-                DataFetcher.fetchRecharges(forceRefresh),
-                ResultsFetcher.fetchResults(forceRefresh)
+                DataFetcher.fetchEntries(isFirstLoad || forceRefresh),
+                DataFetcher.fetchRecharges(isFirstLoad || forceRefresh),
+                ResultsFetcher.fetchResults(isFirstLoad || forceRefresh)
             ]);
 
             state.entries = entries;
@@ -285,6 +297,8 @@ window.DataStore = (function() {
 
             // Calculate quick counts
             calculateQuickCounts();
+
+            console.log('DataStore: Fresh data loaded -', state.entries.length, 'entries');
 
             // Save to localStorage for next visit
             saveToStorage();

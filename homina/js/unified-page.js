@@ -839,7 +839,9 @@ window.UnifiedPage = (function() {
         console.log('UnifiedPage: Initializing...');
         
         bindEvents();
-        loadAllData();
+        
+        // Always load fresh data on init
+        loadAllData(true);
         
         isInitialized = true;
     }
@@ -847,16 +849,21 @@ window.UnifiedPage = (function() {
     // Event listeners
     if (typeof AdminCore !== 'undefined') {
         AdminCore.on('refresh', () => {
-            DataStore.loadData(true).then(() => loadAllData(true));
+            console.log('UnifiedPage: Refresh event received');
+            loadAllData(true);
         });
         
-        AdminCore.on('dataStoreReady', () => {
-            if (isInitialized) loadAllData();
+        AdminCore.on('dataStoreReady', ({ fromCache }) => {
+            // Only reload if data came from network (not cache)
+            if (!fromCache && isInitialized) {
+                console.log('UnifiedPage: Fresh data ready, re-rendering');
+                loadAllData(false); // Don't force refresh again, just re-render
+            }
         });
         
         AdminCore.on('platformChange', ({ platform }) => {
             console.log('UnifiedPage: Platform changed to', platform);
-            loadAllData();
+            loadAllData(false); // Re-render with new platform filter
         });
     }
 
@@ -864,7 +871,8 @@ window.UnifiedPage = (function() {
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
-        init();
+        // Small delay to ensure AdminCore is ready
+        setTimeout(init, 50);
     }
 
     // ============================================
