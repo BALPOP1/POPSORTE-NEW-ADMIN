@@ -94,31 +94,11 @@ window.UnifiedPage = (function() {
         });
         document.getElementById('statPending').textContent = pending.length.toLocaleString();
         
-        // Platform breakdown - dynamically generate from data
+        // Platform breakdown
         if (platform === 'ALL' && allEntries.length > 0) {
             const breakdown = DataStore.getEntriesByPlatform(allEntries);
-            const breakdownEl = document.getElementById('platformBreakdown');
-            
-            if (breakdownEl) {
-                // Generate HTML for each platform in breakdown
-                let html = '';
-                Object.entries(breakdown).forEach(([platformCode, data]) => {
-                    const config = AdminCore.getPlatformConfig(platformCode);
-                    const icon = config?.icon || '🎯';
-                    const colorClass = platformCode.toLowerCase();
-                    
-                    html += `
-                        <div class="platform-breakdown-item">
-                            <span class="platform-name">
-                                <span class="platform-badge ${colorClass}">${icon} ${platformCode}</span>
-                            </span>
-                            <span class="platform-value">${data.count.toLocaleString()} tickets</span>
-                        </div>
-                    `;
-                });
-                
-                breakdownEl.innerHTML = html;
-            }
+            document.getElementById('statPOPN1Tickets').textContent = breakdown.POPN1.count.toLocaleString() + ' tickets';
+            document.getElementById('statPOPLUZTickets').textContent = breakdown.POPLUZ.count.toLocaleString() + ' tickets';
         }
         
         // Engagement

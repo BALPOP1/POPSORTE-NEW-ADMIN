@@ -27,47 +27,21 @@ window.AdminCore = (function() {
     const DEFAULT_SECTION = 'dashboard';
     
     /**
-     * Platform Configuration
-     * Centralized config for all platforms - add new platforms here
-     * Each platform can have custom icon, prize pool, and color
+     * Available platforms - detected from entries data
+     * 'ALL' shows combined data with platform breakdown
      */
-    const PLATFORM_CONFIG = {
-        'POPN1': {
-            name: 'POPN1',
-            icon: '🎰',
-            prizePool: 1000,
-            color: 'primary',
-            title: 'POPN1 Platform'
-        },
-        'POPLUZ': {
-            name: 'POPLUZ',
-            icon: '💡',
-            prizePool: 1000,
-            color: 'warning',
-            title: 'POPLUZ Platform'
-        }
-        'POPNEW': {
-            name: 'POPNEW',
-            icon: '🤑',
-            prizePool: 1500,
-            color: 'warning',
-            title: 'POPNEW Platform'
-        },
-        // To add a new platform, simply add an entry here:
-        // 'POPNEW': {
-        //     name: 'POPNEW',
-        //     icon: '⭐',
-        //     prizePool: 2000,
-        //     color: 'success',
-        //     title: 'POPNEW Platform'
-        // }
-    };
+    const PLATFORMS = ['ALL', 'POPN1', 'POPLUZ'];
+    const DEFAULT_PLATFORM = 'ALL';
     
     /**
-     * Available platforms - dynamically built from config + 'ALL'
+     * Platform-specific prize pools (R$)
+     * Can be configured per platform
      */
-    let PLATFORMS = ['ALL', ...Object.keys(PLATFORM_CONFIG)];
-    const DEFAULT_PLATFORM = 'ALL';
+    const PLATFORM_PRIZES = {
+        'POPN1': 1000,
+        'POPLUZ': 1000,
+        'DEFAULT': 1000
+    };
 
     // ============================================
     // State
@@ -561,19 +535,7 @@ window.AdminCore = (function() {
      * @returns {number} Prize pool amount in R$
      */
     function getPlatformPrize(platform) {
-        if (platform === 'ALL' || platform === 'DEFAULT' || !platform) {
-            return 1000; // Default prize pool
-        }
-        return PLATFORM_CONFIG[platform]?.prizePool || 1000;
-    }
-    
-    /**
-     * Get platform configuration
-     * @param {string} platform - Platform code
-     * @returns {Object|null} Platform config object
-     */
-    function getPlatformConfig(platform) {
-        return PLATFORM_CONFIG[platform] || null;
+        return PLATFORM_PRIZES[platform] || PLATFORM_PRIZES.DEFAULT;
     }
 
     /**
@@ -591,74 +553,11 @@ window.AdminCore = (function() {
             platformIndicator.textContent = currentPlatform === 'ALL' ? '' : `[${currentPlatform}]`;
         }
     }
-    
-    /**
-     * Detect available platforms from entry data
-     * @param {Object[]} entries - All entries
-     * @returns {string[]} Array of detected platform codes
-     */
-    function detectAvailablePlatforms(entries) {
-        const platforms = new Set(['ALL']); // Always include ALL
-        
-        entries.forEach(e => {
-            if (e.platform) {
-                const platformCode = e.platform.toUpperCase();
-                // Only add if it's in our config or if it matches known platforms
-                if (PLATFORM_CONFIG[platformCode] || platformCode === 'POPN1' || platformCode === 'POPLUZ') {
-                    platforms.add(platformCode);
-                }
-            }
-        });
-        
-        // If no platforms detected, default to configured platforms
-        if (platforms.size === 1) { // Only 'ALL'
-            Object.keys(PLATFORM_CONFIG).forEach(p => platforms.add(p));
-        }
-        
-        return Array.from(platforms);
-    }
-    
-    /**
-     * Generate platform switcher UI dynamically from configuration
-     */
-    function generatePlatformSwitcherUI() {
-        const switcher = document.querySelector('.platform-switcher');
-        if (!switcher) {
-            console.warn('Platform switcher container not found');
-            return;
-        }
-        
-        // Build HTML for ALL button
-        let html = `
-            <button type="button" class="platform-btn" data-platform="ALL" title="All Platforms Combined">
-                <span class="platform-icon">🌐</span>
-                <span class="platform-name">ALL</span>
-            </button>
-        `;
-        
-        // Build HTML for each configured platform
-        Object.entries(PLATFORM_CONFIG).forEach(([code, config]) => {
-            html += `
-                <button type="button" class="platform-btn" data-platform="${code}" title="${config.title}">
-                    <span class="platform-icon">${config.icon}</span>
-                    <span class="platform-name">${config.name}</span>
-                </button>
-            `;
-        });
-        
-        switcher.innerHTML = html;
-        console.log('Platform switcher UI generated with', Object.keys(PLATFORM_CONFIG).length + 1, 'platforms');
-    }
 
     /**
      * Initialize platform switcher
-     * Generates UI dynamically from config and attaches event listeners
      */
     function initPlatformSwitcher() {
-        // First, generate the UI from configuration
-        generatePlatformSwitcherUI();
-        
-        // Then attach event listeners
         const buttons = document.querySelectorAll('.platform-btn');
         console.log('Initializing platform switcher, found', buttons.length, 'buttons');
         
@@ -669,8 +568,12 @@ window.AdminCore = (function() {
                 return;
             }
             
+            // Remove any existing listeners by cloning
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(newBtn, btn);
+            
             // Add click handler
-            btn.addEventListener('click', function(e) {
+            newBtn.addEventListener('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 console.log('Platform button clicked:', this.dataset.platform);
@@ -678,7 +581,7 @@ window.AdminCore = (function() {
             }, false);
             
             // Also handle mousedown for immediate feedback
-            btn.addEventListener('mousedown', function(e) {
+            newBtn.addEventListener('mousedown', function(e) {
                 e.stopPropagation();
             }, false);
         });
@@ -1046,9 +949,6 @@ window.AdminCore = (function() {
         getCurrentPlatform,
         setCurrentPlatform,
         getPlatformPrize,
-        getPlatformConfig,
-        detectAvailablePlatforms,
-        generatePlatformSwitcherUI,
         
         // UI
         showApp,
@@ -1088,6 +988,6 @@ window.AdminCore = (function() {
         DEFAULT_SECTION,
         PLATFORMS,
         DEFAULT_PLATFORM,
-        PLATFORM_CONFIG
+        PLATFORM_PRIZES
     };
 })();
