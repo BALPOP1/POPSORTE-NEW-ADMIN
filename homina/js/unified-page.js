@@ -1,0 +1,882 @@
+/**
+ * POP-SORTE Admin Dashboard - Unified Page Module
+ * 
+ * This module combines Dashboard, Entries, Results, and Winners into a single
+ * scrollable page. All sections load together and sidebar navigation scrolls
+ * to the appropriate section.
+ * 
+ * Features:
+ * - Single-page layout with scroll navigation
+ * - Platform filtering (ALL, POPN1, POPLUZ)
+ * - Unified data loading
+ * - Real-time updates
+ * 
+ * Dependencies: AdminCore, DataStore, DataFetcher, ResultsFetcher, 
+ *               RechargeValidator, WinnerCalculator, AdminCharts
+ */
+
+window.UnifiedPage = (function() {
+    'use strict';
+
+    // ============================================
+    // State
+    // ============================================
+    let isInitialized = false;
+    let currentData = {
+        entries: [],
+        allEntries: [],
+        recharges: [],
+        results: [],
+        validationResults: null
+    };
+    
+    // Entries pagination state
+    let filteredEntries = [];
+    let entriesPage = 1;
+    let entriesPerPage = 25;
+    let entriesFilters = {
+        gameId: '',
+        whatsapp: '',
+        contest: '',
+        validity: 'all'
+    };
+    
+    // Results state
+    let filteredResults = [];
+    let resultsSearchTerm = '';
+    
+    // Winners state
+    let allWinners = [];
+    let filteredWinners = [];
+    let winnersCalculation = null;
+    let winnersFilters = {
+        contest: '',
+        prizeLevel: 'all'
+    };
+
+    // Validation cache
+    let validationMap = new Map();
+
+    // ============================================
+    // DASHBOARD SECTION
+    // ============================================
+    
+    function renderDashboard() {
+        const { entries, allEntries, recharges, results } = currentData;
+        const platform = AdminCore.getCurrentPlatform();
+        
+        // Platform label
+        const platformLabel = document.getElementById('platformStatsLabel');
+        if (platformLabel) {
+            platformLabel.textContent = platform === 'ALL' ? 'All Platforms' : platform;
+            platformLabel.className = `badge badge-${platform === 'ALL' ? 'info' : platform === 'POPN1' ? 'primary' : 'warning'}`;
+        }
+        
+        // Platform breakdown visibility
+        const breakdownEl = document.getElementById('platformBreakdown');
+        if (breakdownEl) {
+            breakdownEl.style.display = platform === 'ALL' ? 'grid' : 'none';
+        }
+        
+        // Stats
+        document.getElementById('statTotalTickets').textContent = entries.length.toLocaleString();
+        
+        const contests = new Set(entries.map(e => e.contest).filter(Boolean));
+        document.getElementById('statTotalContests').textContent = contests.size.toLocaleString();
+        
+        const drawDates = new Set(entries.map(e => e.drawDate).filter(Boolean));
+        document.getElementById('statDrawDates').textContent = drawDates.size.toLocaleString();
+        
+        const pending = entries.filter(e => {
+            const status = (e.status || '').toUpperCase();
+            return !['VALID', 'VALIDADO', 'INVALID', 'INVÁLIDO'].includes(status);
+        });
+        document.getElementById('statPending').textContent = pending.length.toLocaleString();
+        
+        // Platform breakdown
+        if (platform === 'ALL' && allEntries.length > 0) {
+            const breakdown = DataStore.getEntriesByPlatform(allEntries);
+            document.getElementById('statPOPN1Tickets').textContent = breakdown.POPN1.count.toLocaleString() + ' tickets';
+            document.getElementById('statPOPLUZTickets').textContent = breakdown.POPLUZ.count.toLocaleString() + ' tickets';
+        }
+        
+        // Engagement
+        renderEngagement();
+        
+        // Charts
+        renderCharts();
+        
+        // Recharge vs Tickets table
+        renderRechargeTable();
+        
+        // Top Entrants
+        renderTopEntrants();
+        
+        // Latest Entries
+        renderLatestEntries();
+        
+        // Winners stats (async)
+        renderWinnersStats();
+    }
+
+    function renderEngagement() {
+        const { entries, recharges } = currentData;
+        
+        if (!recharges || recharges.length === 0) {
+            const uniqueCreators = new Set(entries.map(e => e.gameId).filter(Boolean));
+            document.getElementById('statRechargers').textContent = '-';
+            document.getElementById('statParticipants').textContent = uniqueCreators.size.toLocaleString();
+            document.getElementById('statNoTicket').textContent = '-';
+            document.getElementById('statParticipationRate').textContent = '-';
+        } else {
+            const engagement = RechargeValidator.analyzeEngagement(entries, recharges);
+            document.getElementById('statRechargers').textContent = engagement.totalRechargers.toLocaleString();
+            document.getElementById('statParticipants').textContent = engagement.totalParticipants.toLocaleString();
+            document.getElementById('statNoTicket').textContent = engagement.rechargedNoTicket.toLocaleString();
+            document.getElementById('statParticipationRate').textContent = `${engagement.participationRate}%`;
+        }
+    }
+
+    function renderCharts() {
+        const { entries, recharges } = currentData;
+        
+        // 7-day ticket creators chart
+        const dailyCreators = WinnerCalculator.getTicketCreatorsByDay(entries, 7);
+        const canvas1 = document.getElementById('chartTicketCreators7Day');
+        if (canvas1) {
+            AdminCharts.createTicketCreators7DayChart(canvas1, dailyCreators);
+        }
+        
+        // Last 7 days chart
+        const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
+        const canvas2 = document.getElementById('chartLast7Days');
+        if (canvas2) {
+            const metric = document.getElementById('chartMetricSelect')?.value || 'all';
+            AdminCharts.createLast7DaysChart(canvas2, dailyData, metric);
+        }
+    }
+
+    function renderRechargeTable() {
+        const { entries, recharges } = currentData;
+        const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
+        
+        const tbody = document.getElementById('rechargeVsTicketsBody');
+        if (!tbody) return;
+        
+        if (dailyData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No data</td></tr>';
+            return;
+        }
+        
+        const hasRechargeData = recharges && recharges.length > 0;
+        
+        tbody.innerHTML = dailyData.map(day => `
+            <tr>
+                <td><strong>${day.displayDate}</strong></td>
+                <td>${hasRechargeData ? day.totalRechargers : '-'}</td>
+                <td>${hasRechargeData ? day.totalParticipants : '-'}</td>
+                <td class="text-warning">${hasRechargeData ? day.rechargedNoTicket : '-'}</td>
+                <td class="text-success">${hasRechargeData ? day.participationRate + '%' : '-'}</td>
+                <td><strong>${day.totalEntries}</strong></td>
+            </tr>
+        `).join('');
+    }
+
+    function renderTopEntrants() {
+        const { entries } = currentData;
+        const topEntrants = DataFetcher.getTopEntrants(entries, 10);
+        
+        const tbody = document.getElementById('topEntrantsBody');
+        if (!tbody) return;
+        
+        if (topEntrants.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No data</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = topEntrants.map((entrant, index) => `
+            <tr>
+                <td><span class="badge badge-${index < 3 ? 'warning' : 'info'}">${index + 1}</span></td>
+                <td><strong>${entrant.gameId}</strong></td>
+                <td>${AdminCore.maskWhatsApp(entrant.whatsapp)}</td>
+                <td>${entrant.count.toLocaleString()}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderLatestEntries() {
+        const { entries } = currentData;
+        const latest = entries.slice(0, 10);
+        
+        const tbody = document.getElementById('latestEntriesContainer');
+        if (!tbody) return;
+        
+        if (latest.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No entries</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = latest.map(entry => {
+            const time = entry.parsedDate
+                ? AdminCore.formatBrazilDateTime(entry.parsedDate, { hour: '2-digit', minute: '2-digit' })
+                : '--:--';
+            
+            const numbersHtml = entry.numbers.slice(0, 5).map(n => {
+                const colorClass = AdminCore.getBallColorClass(n);
+                return `<span class="number-badge ${colorClass}" style="width:22px;height:22px;font-size:0.6rem">${String(n).padStart(2,'0')}</span>`;
+            }).join('');
+            
+            const platform = (entry.platform || 'POPN1').toUpperCase();
+            const platformClass = platform === 'POPLUZ' ? 'popluz' : 'popn1';
+            
+            return `
+                <tr>
+                    <td style="font-size:0.85rem">${time}</td>
+                    <td><strong>${entry.gameId}</strong></td>
+                    <td><span class="platform-badge ${platformClass}">${platform}</span></td>
+                    <td><div class="numbers-display">${numbersHtml}</div></td>
+                    <td>${entry.contest}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    async function renderWinnersStats() {
+        try {
+            const { entries, results } = currentData;
+            const platform = AdminCore.getCurrentPlatform();
+            const winnerStats = await WinnerCalculator.getWinnerStats(entries, results, platform);
+            
+            document.getElementById('statTotalWinners').textContent = winnerStats.totalWinners.toLocaleString();
+            document.getElementById('statWinRate').textContent = `${winnerStats.winRate}%`;
+        } catch (error) {
+            console.error('Error rendering winners stats:', error);
+        }
+    }
+
+    // ============================================
+    // ENTRIES SECTION
+    // ============================================
+    
+    async function renderEntries() {
+        const { entries, recharges, validationResults } = currentData;
+        
+        // Stats
+        if (validationResults) {
+            document.getElementById('statValid').textContent = validationResults.stats.valid.toLocaleString();
+            document.getElementById('statInvalid').textContent = validationResults.stats.invalid.toLocaleString();
+            document.getElementById('statCutoff').textContent = validationResults.stats.cutoff.toLocaleString();
+        }
+        document.getElementById('statRechargesCount').textContent = recharges.length.toLocaleString();
+        
+        // Validation banner
+        const banner = document.getElementById('validationBanner');
+        if (banner) {
+            if (recharges.length === 0) {
+                banner.className = 'status-banner warning';
+                banner.innerHTML = '<span class="status-banner-icon">⚠️</span><span class="status-banner-text">Recharge data not loaded.</span>';
+            } else if (validationResults) {
+                banner.className = 'status-banner success';
+                banner.innerHTML = `<span class="status-banner-icon">✅</span><span class="status-banner-text">Validation complete. ${recharges.length} recharges processed.</span>`;
+            }
+        }
+        
+        // Build validation map
+        validationMap.clear();
+        if (validationResults) {
+            validationResults.results.forEach(v => {
+                if (v.ticket?.ticketNumber) {
+                    validationMap.set(v.ticket.ticketNumber, v);
+                }
+            });
+        }
+        
+        // Populate filter options
+        const contests = [...new Set(entries.map(e => e.contest).filter(Boolean))].sort((a, b) => parseInt(b) - parseInt(a));
+        const contestSelect = document.getElementById('filterContest');
+        if (contestSelect) {
+            contestSelect.innerHTML = '<option value="">All</option>' + contests.map(c => `<option value="${c}">${c}</option>`).join('');
+        }
+        
+        // Apply filters
+        applyEntriesFilters();
+    }
+
+    function applyEntriesFilters() {
+        let result = [...currentData.entries];
+        
+        if (entriesFilters.gameId) {
+            const term = entriesFilters.gameId.toLowerCase();
+            result = result.filter(e => e.gameId.toLowerCase().includes(term));
+        }
+        if (entriesFilters.whatsapp) {
+            const term = entriesFilters.whatsapp.toLowerCase();
+            result = result.filter(e => (e.whatsapp || '').toLowerCase().includes(term));
+        }
+        if (entriesFilters.contest) {
+            result = result.filter(e => e.contest === entriesFilters.contest);
+        }
+        if (entriesFilters.validity !== 'all') {
+            result = result.filter(e => {
+                const validation = validationMap.get(e.ticketNumber);
+                const status = validation?.status || 'UNKNOWN';
+                return entriesFilters.validity === 'valid' ? status === 'VALID' : status === 'INVALID';
+            });
+        }
+        
+        filteredEntries = result;
+        entriesPage = 1;
+        renderEntriesTable();
+        renderEntriesPagination();
+    }
+
+    function renderEntriesTable() {
+        const tbody = document.getElementById('entriesTableBody');
+        if (!tbody) return;
+        
+        const start = (entriesPage - 1) * entriesPerPage;
+        const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
+        
+        if (pageEntries.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No entries found</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = pageEntries.map(entry => {
+            const validation = validationMap.get(entry.ticketNumber);
+            const status = validation?.status || 'UNKNOWN';
+            
+            let statusBadge = '';
+            switch (status) {
+                case 'VALID': statusBadge = '<span class="badge badge-success">✅ VALID</span>'; break;
+                case 'INVALID': statusBadge = '<span class="badge badge-danger">❌ INVALID</span>'; break;
+                default: statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
+            }
+            
+            const formattedTime = entry.parsedDate
+                ? AdminCore.formatBrazilDateTime(entry.parsedDate, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                : entry.timestamp;
+            
+            const numbersHtml = entry.numbers.slice(0, 5).map(n => {
+                const colorClass = AdminCore.getBallColorClass(n);
+                return `<span class="number-badge ${colorClass}" style="width:24px;height:24px;font-size:0.6rem">${String(n).padStart(2,'0')}</span>`;
+            }).join('');
+            
+            const platform = (entry.platform || 'POPN1').toUpperCase();
+            
+            return `
+                <tr>
+                    <td>${statusBadge}</td>
+                    <td style="font-size:0.8rem;white-space:nowrap">${formattedTime}</td>
+                    <td><span class="platform-badge ${platform.toLowerCase()}">${platform}</span></td>
+                    <td><strong>${entry.gameId}</strong></td>
+                    <td><div class="numbers-display">${numbersHtml}</div></td>
+                    <td>${entry.contest}</td>
+                    <td><button class="btn btn-sm btn-outline" onclick="UnifiedPage.showTicketDetails('${entry.ticketNumber}')">Details</button></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderEntriesPagination() {
+        const total = filteredEntries.length;
+        const totalPages = Math.ceil(total / entriesPerPage);
+        const start = (entriesPage - 1) * entriesPerPage + 1;
+        const end = Math.min(entriesPage * entriesPerPage, total);
+        
+        document.getElementById('paginationInfo').textContent = `Showing ${total > 0 ? start : 0}-${end} of ${total} entries`;
+        document.getElementById('btnPrevPage').disabled = entriesPage <= 1;
+        document.getElementById('btnNextPage').disabled = entriesPage >= totalPages;
+        
+        const pageNumbers = document.getElementById('pageNumbers');
+        if (pageNumbers) {
+            let html = '';
+            for (let i = 1; i <= Math.min(totalPages, 5); i++) {
+                html += `<button class="pagination-btn ${i === entriesPage ? 'active' : ''}" onclick="UnifiedPage.goToEntriesPage(${i})">${i}</button>`;
+            }
+            if (totalPages > 5) html += `<span class="text-muted">... ${totalPages}</span>`;
+            pageNumbers.innerHTML = html;
+        }
+    }
+
+    function goToEntriesPage(page) {
+        entriesPage = page;
+        renderEntriesTable();
+        renderEntriesPagination();
+    }
+
+    function showTicketDetails(ticketNumber) {
+        const entry = currentData.entries.find(e => e.ticketNumber === ticketNumber);
+        if (!entry) return;
+        
+        const validation = validationMap.get(ticketNumber);
+        const modalContent = document.getElementById('ticketModalContent');
+        if (!modalContent) return;
+        
+        let statusHtml = '';
+        if (validation) {
+            const status = validation.status;
+            const statusClass = { 'VALID': 'success', 'INVALID': 'danger' }[status] || 'warning';
+            statusHtml = `<div class="status-banner ${statusClass} mb-4">
+                <span class="status-banner-icon">${status === 'VALID' ? '✅' : status === 'INVALID' ? '❌' : '⏳'}</span>
+                <span class="status-banner-text"><strong>${status}</strong> - ${validation.reason || 'Checking...'}</span>
+            </div>`;
+        }
+        
+        const numbersHtml = entry.numbers.map(n => {
+            const colorClass = AdminCore.getBallColorClass(n);
+            return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
+        }).join('');
+        
+        modalContent.innerHTML = `
+            ${statusHtml}
+            <h4 class="mb-3">Ticket Information</h4>
+            <div class="ticket-info-grid mb-4">
+                <div class="ticket-info-item"><span class="label">Ticket #</span><span class="value">${entry.ticketNumber}</span></div>
+                <div class="ticket-info-item"><span class="label">Game ID</span><span class="value">${entry.gameId}</span></div>
+                <div class="ticket-info-item"><span class="label">Platform</span><span class="value">${entry.platform}</span></div>
+                <div class="ticket-info-item"><span class="label">Contest</span><span class="value">${entry.contest}</span></div>
+                <div class="ticket-info-item"><span class="label">Draw Date</span><span class="value">${entry.drawDate}</span></div>
+                <div class="ticket-info-item"><span class="label">Registered</span><span class="value">${entry.parsedDate ? AdminCore.formatBrazilDateTime(entry.parsedDate) : entry.timestamp}</span></div>
+            </div>
+            <h4 class="mb-3">Selected Numbers</h4>
+            <div class="numbers-display mb-4">${numbersHtml}</div>
+        `;
+        
+        AdminCore.openModal('ticketModal');
+    }
+
+    function exportEntriesCSV() {
+        if (filteredEntries.length === 0) {
+            AdminCore.showToast('No data to export', 'warning');
+            return;
+        }
+        
+        const headers = ['Status', 'Date/Time', 'Platform', 'Game ID', 'Numbers', 'Contest', 'Ticket #'];
+        const rows = filteredEntries.map(entry => {
+            const validation = validationMap.get(entry.ticketNumber);
+            return [
+                validation?.status || 'UNKNOWN',
+                entry.timestamp,
+                entry.platform,
+                entry.gameId,
+                entry.numbers.join(', '),
+                entry.contest,
+                entry.ticketNumber
+            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+        });
+        
+        const csv = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `entries_${AdminCore.getBrazilDateString(new Date())}.csv`;
+        link.click();
+        
+        AdminCore.showToast(`${filteredEntries.length} entries exported`, 'success');
+    }
+
+    // ============================================
+    // RESULTS SECTION
+    // ============================================
+    
+    function renderResults() {
+        const { results } = currentData;
+        
+        // Stats
+        const total = results.length;
+        const validDraws = results.filter(r => !r.isNoDraw).length;
+        const noDraws = results.filter(r => r.isNoDraw).length;
+        
+        document.getElementById('statTotalResults').textContent = total.toLocaleString();
+        document.getElementById('statValidDraws').textContent = validDraws.toLocaleString();
+        document.getElementById('statNoDraws').textContent = noDraws.toLocaleString();
+        
+        // Latest result card
+        const latest = results.find(r => !r.isNoDraw);
+        const card = document.getElementById('latestResultCard');
+        if (latest && card) {
+            card.style.display = 'block';
+            document.getElementById('latestResultContest').textContent = `Contest #${latest.contest}`;
+            document.getElementById('latestResultDate').textContent = latest.drawDate;
+            document.getElementById('latestResultNumbers').innerHTML = latest.numbers.map(n => {
+                const colorClass = AdminCore.getBallColorClass(n);
+                return `<span class="number-badge ${colorClass}" style="width:48px;height:48px;font-size:1.1rem">${String(n).padStart(2,'0')}</span>`;
+            }).join('');
+        }
+        
+        filteredResults = [...results];
+        renderResultsTable();
+    }
+
+    function renderResultsTable() {
+        const tbody = document.getElementById('resultsTableBody');
+        if (!tbody) return;
+        
+        let data = filteredResults;
+        if (resultsSearchTerm) {
+            const term = resultsSearchTerm.toLowerCase();
+            data = data.filter(r => r.contest.toLowerCase().includes(term) || (r.drawDate || '').toLowerCase().includes(term));
+        }
+        
+        if (data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No results found</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = data.slice(0, 50).map(result => {
+            let numbersHtml = '';
+            if (result.isNoDraw) {
+                numbersHtml = '<span class="badge badge-warning">No Draw</span>';
+            } else {
+                numbersHtml = result.numbers.map(n => {
+                    const colorClass = AdminCore.getBallColorClass(n);
+                    return `<span class="number-badge ${colorClass}" style="width:28px;height:28px;font-size:0.7rem">${String(n).padStart(2,'0')}</span>`;
+                }).join('');
+            }
+            
+            let sourceBadge = '<span class="badge badge-gray">Manual</span>';
+            const source = (result.source || '').toLowerCase();
+            if (source.includes('caixa')) sourceBadge = '<span class="badge badge-success">Caixa</span>';
+            else if (source.includes('api')) sourceBadge = '<span class="badge badge-info">API</span>';
+            
+            return `
+                <tr>
+                    <td><strong>#${result.contest}</strong></td>
+                    <td>${result.drawDate || '-'}</td>
+                    <td><div class="numbers-display">${numbersHtml}</div></td>
+                    <td>${sourceBadge}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // ============================================
+    // WINNERS SECTION
+    // ============================================
+    
+    async function renderWinners() {
+        const { entries, results } = currentData;
+        const platform = AdminCore.getCurrentPlatform();
+        
+        try {
+            // Calculate winners
+            winnersCalculation = await WinnerCalculator.calculateAllWinners(entries, results, platform);
+            allWinners = winnersCalculation.allWinners || [];
+            filteredWinners = [...allWinners];
+            
+            const stats = winnersCalculation.stats;
+            document.getElementById('stat5Matches').textContent = (stats.byTier?.[5] || 0).toLocaleString();
+            document.getElementById('stat4Matches').textContent = (stats.byTier?.[4] || 0).toLocaleString();
+            document.getElementById('stat3Matches').textContent = (stats.byTier?.[3] || 0).toLocaleString();
+            document.getElementById('statWinnersTotal').textContent = (stats.totalWinners || 0).toLocaleString();
+            
+            // Prize pool label
+            const prizePool = WinnerCalculator.getPrizePool(platform === 'ALL' ? 'DEFAULT' : platform);
+            const prizeLabel = document.getElementById('prizePoolLabel');
+            if (prizeLabel) prizeLabel.textContent = `Prize Pool: R$ ${prizePool.toLocaleString()}`;
+            
+            // Winners by contest cards
+            renderWinnersCards();
+            
+            // Populate filter options
+            const contests = [...new Set(allWinners.map(w => w.contest).filter(Boolean))].sort((a, b) => parseInt(b) - parseInt(a));
+            const contestSelect = document.getElementById('filterWinnersContest');
+            if (contestSelect) {
+                contestSelect.innerHTML = '<option value="">All</option>' + contests.map(c => `<option value="${c}">${c}</option>`).join('');
+            }
+            
+            renderWinnersTable();
+            
+        } catch (error) {
+            console.error('Error calculating winners:', error);
+            document.getElementById('winnersTableBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error calculating winners</td></tr>';
+        }
+    }
+
+    function renderWinnersCards() {
+        const container = document.getElementById('winnersByContestContainer');
+        if (!container || !winnersCalculation) return;
+        
+        const contestsWithResults = winnersCalculation.contestResults.filter(c => c.hasResult).slice(0, 6);
+        
+        if (contestsWithResults.length === 0) {
+            container.innerHTML = '<div class="card"><div class="card-body text-center text-muted">No contest results available</div></div>';
+            return;
+        }
+        
+        container.innerHTML = contestsWithResults.map(contest => {
+            const numbersHtml = contest.winningNumbers.map(n => {
+                const colorClass = AdminCore.getBallColorClass(n);
+                return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
+            }).join('');
+            
+            const tierCounts = [];
+            for (let tier = 5; tier >= 3; tier--) {
+                const count = contest.byTier[tier]?.filter(w => w.isValidEntry).length || 0;
+                if (count > 0) {
+                    const emoji = tier === 5 ? '🏆' : tier === 4 ? '🥈' : '🥉';
+                    tierCounts.push(`<span class="badge badge-${tier === 5 ? 'warning' : tier === 4 ? 'info' : 'success'}">${emoji} ${tier}: ${count}</span>`);
+                }
+            }
+            
+            let prizeInfo = '';
+            if (contest.winningTier > 0 && contest.prizePerWinner > 0) {
+                const winnerCount = contest.byTier[contest.winningTier]?.filter(w => w.isValidEntry).length || 0;
+                prizeInfo = `<div class="text-success mt-2" style="font-size:0.8rem">💰 R$ ${contest.prizePerWinner.toFixed(2)} per winner</div>`;
+            }
+            
+            return `
+                <div class="card">
+                    <div class="card-header">
+                        <strong>Contest #${contest.contest}</strong>
+                        <span class="text-muted">${contest.drawDate}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="numbers-display mb-2" style="justify-content:center">${numbersHtml}</div>
+                        <div class="text-center">
+                            ${tierCounts.length > 0 ? tierCounts.join(' ') : '<span class="text-muted">No winners</span>'}
+                            ${prizeInfo}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function applyWinnersFilters() {
+        let result = [...allWinners];
+        
+        if (winnersFilters.contest) {
+            result = result.filter(w => w.contest === winnersFilters.contest);
+        }
+        if (winnersFilters.prizeLevel !== 'all') {
+            const level = parseInt(winnersFilters.prizeLevel);
+            result = result.filter(w => w.matches === level);
+        }
+        
+        filteredWinners = result;
+        renderWinnersTable();
+    }
+
+    function renderWinnersTable() {
+        const tbody = document.getElementById('winnersTableBody');
+        if (!tbody) return;
+        
+        if (filteredWinners.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No winners found</td></tr>';
+            return;
+        }
+        
+        const displayWinners = filteredWinners.slice(0, 100);
+        
+        tbody.innerHTML = displayWinners.map(winner => {
+            let matchBadge = '';
+            switch (winner.matches) {
+                case 5: matchBadge = '<span class="badge" style="background:#fbbf24;color:#000">🏆 5</span>'; break;
+                case 4: matchBadge = '<span class="badge" style="background:#9ca3af;color:#000">🥈 4</span>'; break;
+                case 3: matchBadge = '<span class="badge" style="background:#d97706;color:#fff">🥉 3</span>'; break;
+                default: matchBadge = `<span class="badge badge-info">${winner.matches}</span>`;
+            }
+            
+            const matchedSet = new Set(winner.matchedNumbers || []);
+            const numbersHtml = winner.numbers.map(n => {
+                const isMatched = matchedSet.has(n);
+                const colorClass = AdminCore.getBallColorClass(n);
+                return `<span class="number-badge ${colorClass} ${isMatched ? 'match' : ''}" style="width:22px;height:22px;font-size:0.6rem">${String(n).padStart(2,'0')}</span>`;
+            }).join('');
+            
+            const matchedHtml = (winner.matchedNumbers || []).map(n => {
+                const colorClass = AdminCore.getBallColorClass(n);
+                return `<span class="number-badge ${colorClass}" style="width:22px;height:22px;font-size:0.6rem">${String(n).padStart(2,'0')}</span>`;
+            }).join('');
+            
+            return `
+                <tr>
+                    <td>${matchBadge}</td>
+                    <td><strong>${winner.gameId}</strong></td>
+                    <td><div class="numbers-display">${numbersHtml}</div></td>
+                    <td><div class="numbers-display">${matchedHtml}</div></td>
+                    <td>${winner.contest}</td>
+                    <td>${winner.drawDate}</td>
+                </tr>
+            `;
+        }).join('');
+        
+        if (filteredWinners.length > 100) {
+            tbody.innerHTML += `<tr><td colspan="6" class="text-center text-muted">Showing 100 of ${filteredWinners.length} winners</td></tr>`;
+        }
+    }
+
+    function exportWinnersCSV() {
+        if (filteredWinners.length === 0) {
+            AdminCore.showToast('No winners to export', 'warning');
+            return;
+        }
+        
+        const headers = ['Matches', 'Game ID', 'Numbers', 'Matched Numbers', 'Draw Date', 'Contest'];
+        const rows = filteredWinners.map(w => [
+            w.matches,
+            w.gameId,
+            w.numbers.join(', '),
+            (w.matchedNumbers || []).join(', '),
+            w.drawDate,
+            w.contest
+        ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+        
+        const csv = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `winners_${AdminCore.getBrazilDateString(new Date())}.csv`;
+        link.click();
+        
+        AdminCore.showToast(`${filteredWinners.length} winners exported`, 'success');
+    }
+
+    // ============================================
+    // DATA LOADING
+    // ============================================
+    
+    async function loadAllData(forceRefresh = false) {
+        console.log('UnifiedPage: Loading all data...');
+        
+        try {
+            await DataStore.loadData(forceRefresh);
+            
+            const platform = AdminCore.getCurrentPlatform();
+            
+            currentData.entries = DataStore.getEntries(platform);
+            currentData.allEntries = DataStore.getAllEntries();
+            currentData.recharges = DataStore.getRecharges();
+            currentData.results = DataStore.getResults();
+            
+            // Validate entries
+            currentData.validationResults = await RechargeValidator.validateAllTickets(currentData.entries, currentData.recharges);
+            
+            console.log('UnifiedPage: Data loaded -', currentData.entries.length, 'entries');
+            
+            // Render all sections
+            renderDashboard();
+            renderEntries();
+            renderResults();
+            renderWinners();
+            
+        } catch (error) {
+            console.error('UnifiedPage: Error loading data:', error);
+            AdminCore.showToast('Error loading data: ' + error.message, 'error');
+        }
+    }
+
+    // ============================================
+    // EVENT BINDING
+    // ============================================
+    
+    function bindEvents() {
+        // Chart metric selector
+        document.getElementById('chartMetricSelect')?.addEventListener('change', (e) => {
+            const { entries, recharges } = currentData;
+            const dailyData = RechargeValidator.analyzeEngagementByDate(entries, recharges, 7);
+            const canvas = document.getElementById('chartLast7Days');
+            if (canvas) AdminCharts.createLast7DaysChart(canvas, dailyData, e.target.value);
+        });
+        
+        // Entries filters
+        const debouncedEntriesFilter = AdminCore.debounce(applyEntriesFilters, 300);
+        document.getElementById('filterGameId')?.addEventListener('input', (e) => { entriesFilters.gameId = e.target.value; debouncedEntriesFilter(); });
+        document.getElementById('filterWhatsapp')?.addEventListener('input', (e) => { entriesFilters.whatsapp = e.target.value; debouncedEntriesFilter(); });
+        document.getElementById('filterContest')?.addEventListener('change', (e) => { entriesFilters.contest = e.target.value; applyEntriesFilters(); });
+        document.getElementById('filterValidity')?.addEventListener('change', (e) => { entriesFilters.validity = e.target.value; applyEntriesFilters(); });
+        document.getElementById('btnClearFilters')?.addEventListener('click', () => {
+            entriesFilters = { gameId: '', whatsapp: '', contest: '', validity: 'all' };
+            document.getElementById('filterGameId').value = '';
+            document.getElementById('filterWhatsapp').value = '';
+            document.getElementById('filterContest').value = '';
+            document.getElementById('filterValidity').value = 'all';
+            applyEntriesFilters();
+        });
+        document.getElementById('btnExportCSV')?.addEventListener('click', exportEntriesCSV);
+        document.getElementById('btnPrevPage')?.addEventListener('click', () => { if (entriesPage > 1) { entriesPage--; renderEntriesTable(); renderEntriesPagination(); } });
+        document.getElementById('btnNextPage')?.addEventListener('click', () => {
+            const totalPages = Math.ceil(filteredEntries.length / entriesPerPage);
+            if (entriesPage < totalPages) { entriesPage++; renderEntriesTable(); renderEntriesPagination(); }
+        });
+        document.getElementById('perPageSelect')?.addEventListener('change', (e) => {
+            entriesPerPage = parseInt(e.target.value);
+            entriesPage = 1;
+            renderEntriesTable();
+            renderEntriesPagination();
+        });
+        
+        // Results search
+        const debouncedResultsSearch = AdminCore.debounce(renderResultsTable, 300);
+        document.getElementById('searchResults')?.addEventListener('input', (e) => { resultsSearchTerm = e.target.value; debouncedResultsSearch(); });
+        
+        // Winners filters
+        document.getElementById('filterWinnersContest')?.addEventListener('change', (e) => { winnersFilters.contest = e.target.value; applyWinnersFilters(); });
+        document.getElementById('filterWinnersPrizeLevel')?.addEventListener('change', (e) => { winnersFilters.prizeLevel = e.target.value; applyWinnersFilters(); });
+        document.getElementById('btnClearWinnersFilters')?.addEventListener('click', () => {
+            winnersFilters = { contest: '', prizeLevel: 'all' };
+            document.getElementById('filterWinnersContest').value = '';
+            document.getElementById('filterWinnersPrizeLevel').value = 'all';
+            applyWinnersFilters();
+        });
+        document.getElementById('btnExportWinnersCSV')?.addEventListener('click', exportWinnersCSV);
+        
+        // Clear cache button
+        document.getElementById('clearCacheBtn')?.addEventListener('click', () => {
+            DataStore.clearStorage();
+            AdminCore.showToast('Cache cleared! Refreshing...', 'success');
+            setTimeout(() => loadAllData(true), 500);
+        });
+    }
+
+    // ============================================
+    // INITIALIZATION
+    // ============================================
+    
+    function init() {
+        console.log('UnifiedPage: Initializing...');
+        
+        bindEvents();
+        loadAllData();
+        
+        isInitialized = true;
+    }
+
+    // Event listeners
+    if (typeof AdminCore !== 'undefined') {
+        AdminCore.on('refresh', () => {
+            DataStore.loadData(true).then(() => loadAllData(true));
+        });
+        
+        AdminCore.on('dataStoreReady', () => {
+            if (isInitialized) loadAllData();
+        });
+        
+        AdminCore.on('platformChange', ({ platform }) => {
+            console.log('UnifiedPage: Platform changed to', platform);
+            loadAllData();
+        });
+    }
+
+    // Auto-init when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    // ============================================
+    // PUBLIC API
+    // ============================================
+    return {
+        init,
+        loadAllData,
+        goToEntriesPage,
+        showTicketDetails,
+        exportEntriesCSV,
+        exportWinnersCSV
+    };
+})();
+
