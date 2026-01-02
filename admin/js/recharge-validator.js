@@ -117,10 +117,17 @@ window.RechargeValidator = (function() {
     /**
      * Get the eligible draw date for a ticket based on registration time
      * @param {Date} registrationTime - When the ticket was registered
-     * @returns {Date} The draw date this ticket is eligible for
+     * @returns {Date|null} The draw date this ticket is eligible for, or null if invalid
      */
     function getEligibleDrawDate(registrationTime) {
+        // Validate registrationTime is a proper Date object
+        if (!registrationTime || !(registrationTime instanceof Date) || isNaN(registrationTime.getTime())) {
+            return null;
+        }
+        
         const regDateStr = AdminCore.getBrazilDateString(registrationTime);
+        if (!regDateStr) return null;
+        
         const regDate = new Date(`${regDateStr}T00:00:00-03:00`);
         
         // Get registration hour in BRT
@@ -150,7 +157,11 @@ window.RechargeValidator = (function() {
      * @returns {Object|null} Matching recharge or null
      */
     function findMatchingRecharge(ticket, recharges, allTickets) {
-        if (!ticket.parsedDate || !recharges || recharges.length === 0) {
+        // Validate ticket.parsedDate is a proper Date object
+        if (!ticket.parsedDate || !(ticket.parsedDate instanceof Date) || isNaN(ticket.parsedDate.getTime())) {
+            return null;
+        }
+        if (!recharges || recharges.length === 0) {
             return null;
         }
         
@@ -158,9 +169,9 @@ window.RechargeValidator = (function() {
         const ticketDrawDate = ticket.drawDate;
         
         // Filter recharges that could potentially match
-        // Recharge must be before ticket creation
+        // Recharge must be before ticket creation and have valid rechargeTime
         const eligibleRecharges = recharges.filter(r => {
-            if (!r.rechargeTime) return false;
+            if (!r.rechargeTime || !(r.rechargeTime instanceof Date) || isNaN(r.rechargeTime.getTime())) return false;
             return r.rechargeTime.getTime() < ticketTime;
         });
         
@@ -175,7 +186,10 @@ window.RechargeValidator = (function() {
         for (const recharge of eligibleRecharges) {
             // Get eligible draw date for this recharge
             const eligibleDraw = getEligibleDrawDate(recharge.rechargeTime);
+            if (!eligibleDraw) continue; // Skip if can't determine eligible draw
+            
             const eligibleDrawStr = AdminCore.getBrazilDateString(eligibleDraw);
+            if (!eligibleDrawStr) continue;
             
             // Check if ticket's draw date matches eligible draw
             // Parse ticket draw date (could be in various formats)
@@ -203,6 +217,8 @@ window.RechargeValidator = (function() {
             const priorTickets = allTickets.filter(t => 
                 t.ticketNumber !== ticket.ticketNumber &&
                 t.parsedDate &&
+                t.parsedDate instanceof Date &&
+                !isNaN(t.parsedDate.getTime()) &&
                 t.parsedDate.getTime() < ticketTime &&
                 t.parsedDate.getTime() > recharge.rechargeTime.getTime()
             );
@@ -216,6 +232,8 @@ window.RechargeValidator = (function() {
             let rechargeUsed = false;
             for (const prior of priorTickets) {
                 const priorEligibleDraw = getEligibleDrawDate(prior.parsedDate);
+                if (!priorEligibleDraw) continue;
+                
                 const priorDrawStr = AdminCore.getBrazilDateString(priorEligibleDraw);
                 if (priorDrawStr === eligibleDrawStr) {
                     rechargeUsed = true;
@@ -283,16 +301,19 @@ window.RechargeValidator = (function() {
         }
         
         // Check for cutoff violation
-        if (ticket.parsedDate) {
+        // Validate parsedDate is a proper Date object before using Date methods
+        if (ticket.parsedDate && ticket.parsedDate instanceof Date && !isNaN(ticket.parsedDate.getTime())) {
             const regHour = ticket.parsedDate.getHours();
             const regMinute = ticket.parsedDate.getMinutes();
             const dateStr = AdminCore.getBrazilDateString(ticket.parsedDate);
-            const checkDate = new Date(`${dateStr}T12:00:00-03:00`);
-            const cutoffHour = getCutoffHour(checkDate);
-            
-            // If registered after cutoff, mark as cutoff shift
-            if (regHour >= cutoffHour || (regHour === cutoffHour - 1 && regMinute > 59)) {
-                result.isCutoff = true;
+            if (dateStr) {
+                const checkDate = new Date(`${dateStr}T12:00:00-03:00`);
+                const cutoffHour = getCutoffHour(checkDate);
+                
+                // If registered after cutoff, mark as cutoff shift
+                if (regHour >= cutoffHour || (regHour === cutoffHour - 1 && regMinute > 59)) {
+                    result.isCutoff = true;
+                }
             }
         }
         

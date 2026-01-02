@@ -19,7 +19,7 @@ window.DataStore = (function() {
     // Constants
     // ============================================
     const STORAGE_KEY = 'popsorte_admin_data';
-    const STORAGE_VERSION = 2;
+    const STORAGE_VERSION = 3; // Bumped to invalidate old cache with broken Date objects
     const STORAGE_TTL = 5 * 60 * 1000; // 5 minutes localStorage cache
     const MIN_RECHARGE_AMOUNT = 1.0;
 
@@ -75,6 +75,51 @@ window.DataStore = (function() {
     }
 
     /**
+     * Reconstruct Date objects from stored data
+     * JSON.stringify converts Date to ISO string, so we need to restore them
+     * @param {Object} entry - Entry with serialized dates
+     * @returns {Object} Entry with proper Date objects
+     */
+    function reconstructEntryDates(entry) {
+        if (!entry) return entry;
+        
+        // Reconstruct parsedDate if it exists
+        if (entry.parsedDate) {
+            if (typeof entry.parsedDate === 'string') {
+                entry.parsedDate = new Date(entry.parsedDate);
+            }
+            // Validate the date is valid
+            if (!(entry.parsedDate instanceof Date) || isNaN(entry.parsedDate.getTime())) {
+                entry.parsedDate = null;
+            }
+        }
+        
+        return entry;
+    }
+
+    /**
+     * Reconstruct Date objects for recharge data
+     * @param {Object} recharge - Recharge with serialized dates
+     * @returns {Object} Recharge with proper Date objects
+     */
+    function reconstructRechargeDates(recharge) {
+        if (!recharge) return recharge;
+        
+        // Reconstruct rechargeTime if it exists
+        if (recharge.rechargeTime) {
+            if (typeof recharge.rechargeTime === 'string') {
+                recharge.rechargeTime = new Date(recharge.rechargeTime);
+            }
+            // Validate the date is valid
+            if (!(recharge.rechargeTime instanceof Date) || isNaN(recharge.rechargeTime.getTime())) {
+                recharge.rechargeTime = null;
+            }
+        }
+        
+        return recharge;
+    }
+
+    /**
      * Load data from localStorage
      * @returns {boolean} True if valid data was loaded
      */
@@ -90,8 +135,9 @@ window.DataStore = (function() {
             if (Date.now() - data.timestamp > STORAGE_TTL) return false;
 
             // Restore partial data for instant display
-            state.entries = data.entries || [];
-            state.recharges = data.recharges || [];
+            // Reconstruct Date objects that were serialized to strings
+            state.entries = (data.entries || []).map(reconstructEntryDates);
+            state.recharges = (data.recharges || []).map(reconstructRechargeDates);
             state.results = data.results || [];
             state.counts = data.counts || state.counts;
             state.lastFetch = data.timestamp;
@@ -274,8 +320,9 @@ window.DataStore = (function() {
         }
 
         // Check for valid recharge timing
+        // Validate entryTime is a proper Date object
         const entryTime = entry.parsedDate;
-        if (!entryTime) {
+        if (!entryTime || !(entryTime instanceof Date) || isNaN(entryTime.getTime())) {
             return { status: 'INVALID', reason: 'Invalid entry timestamp', isCutoff: false };
         }
 
@@ -285,7 +332,8 @@ window.DataStore = (function() {
 
         // Find a valid recharge
         for (const recharge of playerRecharges) {
-            if (!recharge.rechargeTime) continue;
+            // Validate rechargeTime is a proper Date object
+            if (!recharge.rechargeTime || !(recharge.rechargeTime instanceof Date) || isNaN(recharge.rechargeTime.getTime())) continue;
             if (recharge.amount < MIN_RECHARGE_AMOUNT) continue;
 
             // Recharge must be before or within same draw window as entry
