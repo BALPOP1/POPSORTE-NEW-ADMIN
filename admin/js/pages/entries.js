@@ -40,7 +40,6 @@ window.EntriesPage = (function() {
     };
     let cachedValidationMap = null; // Cache validation map
     let isFiltering = false; // Prevent concurrent filtering
-    let virtualTable = null; // Virtual scroll instance
 
     // ============================================
     // HTML Templates
@@ -120,41 +119,46 @@ window.EntriesPage = (function() {
                     </div>
                 </div>
 
-                <!-- Entries Table with Virtual Scrolling -->
+                <!-- Entries Table -->
                 <div class="card">
-                    <!-- Table Header (Fixed) -->
-                    <div class="table-header-container">
+                    <div class="table-container">
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th style="width: 140px;">Status</th>
-                                    <th style="width: 110px;">Date/Time</th>
-                                    <th style="width: 80px;">Platform</th>
-                                    <th style="width: 100px;">Game ID</th>
-                                    <th style="width: 100px;">WhatsApp</th>
-                                    <th style="width: 180px;">Numbers</th>
-                                    <th style="width: 90px;">Draw</th>
-                                    <th style="width: 70px;">Contest</th>
-                                    <th style="width: 70px;">Ticket #</th>
-                                    <th style="width: 70px;">Recharge</th>
-                                    <th style="width: 70px;">Actions</th>
+                                    <th>Status</th>
+                                    <th>Date/Time</th>
+                                    <th>Platform</th>
+                                    <th>Game ID</th>
+                                    <th>WhatsApp</th>
+                                    <th>Numbers</th>
+                                    <th>Draw</th>
+                                    <th>Contest</th>
+                                    <th>Ticket #</th>
+                                    <th>Recharge</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
+                            <tbody id="entriesTableBody">
+                                <tr><td colspan="11" class="text-center text-muted">Loading entries...</td></tr>
+                            </tbody>
                         </table>
                     </div>
                     
-                    <!-- Virtual Scroll Container -->
-                    <div id="entriesVirtualContainer" class="entries-virtual-container">
-                        <div class="page-loading">
-                            <div class="spinner"></div>
-                            <p>Loading entries...</p>
+                    <!-- Pagination -->
+                    <div class="pagination">
+                        <div class="pagination-info" id="paginationInfo">
+                            Showing 0-0 of 0 entries
                         </div>
-                    </div>
-                    
-                    <!-- Row Count Info -->
-                    <div class="virtual-scroll-info">
-                        <span id="entriesCount">0 entries</span>
-                        <span id="scrollHint">Scroll to view more</span>
+                        <div class="pagination-controls">
+                            <select id="perPageSelect" class="pagination-btn">
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                            <button id="btnPrevPage" class="pagination-btn" disabled>← Previous</button>
+                            <span id="pageNumbers"></span>
+                            <button id="btnNextPage" class="pagination-btn">Next →</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -259,6 +263,7 @@ window.EntriesPage = (function() {
             filteredEntries = result;
             currentPage = 1;
             renderTable();
+            renderPagination();
         } finally {
             isFiltering = false;
         }
@@ -385,121 +390,121 @@ window.EntriesPage = (function() {
         return validationMap.get(entry.ticketNumber) || null;
     }
     
-    /**
-     * Render a single row for virtual scrolling
-     * @param {Object} entry - Entry data
-     * @param {number} index - Row index
-     * @returns {string} Row HTML
-     */
-    function renderRowHtml(entry, index) {
-        const validationMap = buildValidationMap();
-        const validation = findValidationForEntry(entry, validationMap);
-        const status = validation?.status || 'UNKNOWN';
-        const isCutoff = validation?.isCutoff || false;
-        
-        // Status badge with reason tooltip
-        const reason = validation?.reason || '';
-        let statusBadge = '';
-        switch (status) {
-            case 'VALID':
-                statusBadge = `<span class="badge badge-success" title="${reason}">✅ VALID</span>`;
-                break;
-            case 'INVALID':
-                statusBadge = `<span class="badge badge-danger" title="${reason}">❌ INVALID</span>`;
-                break;
-            default:
-                statusBadge = '<span class="badge badge-warning" title="Validation pending">⏳ PENDING</span>';
-        }
-        
-        if (isCutoff) {
-            statusBadge += ' <span class="badge badge-gray" title="Registered after 20:00 BRT cutoff">CUTOFF</span>';
-        }
-        
-        // Numbers
-        const numbersHtml = entry.numbers.map(n => {
-            const colorClass = AdminCore.getBallColorClass(n);
-            return `<span class="number-badge ${colorClass}" style="width: 24px; height: 24px; font-size: 0.6rem;">${String(n).padStart(2, '0')}</span>`;
-        }).join('');
-        
-        // Format timestamp
-        const formattedTime = entry.parsedDate
-            ? AdminCore.formatBrazilDateTime(entry.parsedDate, {
-                day: '2-digit',
-                month: '2-digit',
-                year: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            })
-            : entry.timestamp;
-        
-        // Recharge info
-        let rechargeInfo = '-';
-        if (validation?.matchedRecharge) {
-            const r = validation.matchedRecharge;
-            rechargeInfo = `<span class="text-success" style="font-size: 0.75rem;">
-                R$${r.amount?.toFixed(2) || '?'}
-            </span>`;
-        }
-        
-        return `
-            <tr data-index="${index}" data-ticket="${entry.ticketNumber}">
-                <td style="width: 140px;">${statusBadge}</td>
-                <td style="width: 110px; font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
-                <td style="width: 80px;"><span class="badge badge-info">${entry.platform}</span></td>
-                <td style="width: 100px;"><strong>${entry.gameId}</strong></td>
-                <td style="width: 100px;">${AdminCore.maskWhatsApp(entry.whatsapp)}</td>
-                <td style="width: 180px;"><div class="numbers-display">${numbersHtml}</div></td>
-                <td style="width: 90px;">${entry.drawDate}</td>
-                <td style="width: 70px;">${entry.contest}</td>
-                <td style="width: 70px; font-size: 0.75rem;">${entry.ticketNumber}</td>
-                <td style="width: 70px;">${rechargeInfo}</td>
-                <td style="width: 70px;">
-                    <button class="btn btn-sm btn-outline" onclick="EntriesPage.showDetails('${entry.ticketNumber}')">
-                        Details
-                    </button>
-                </td>
-            </tr>
-        `;
-    }
-
-    /**
-     * Initialize or update virtual table with current filtered data
-     */
     function renderTable() {
-        const container = document.getElementById('entriesVirtualContainer');
-        if (!container) return;
+        const tbody = document.getElementById('entriesTableBody');
+        if (!tbody) return;
         
-        // Update count display
-        const countEl = document.getElementById('entriesCount');
-        if (countEl) {
-            countEl.textContent = `${filteredEntries.length.toLocaleString()} entries`;
+        // Build validation map once
+        const validationMap = buildValidationMap();
+        
+        // Calculate pagination
+        const start = (currentPage - 1) * perPage;
+        const end = start + perPage;
+        const pageEntries = filteredEntries.slice(start, end);
+        
+        if (pageEntries.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No entries found</td></tr>';
+            return;
         }
         
-        // Create or update virtual table
-        if (!virtualTable) {
-            virtualTable = VirtualScroll.create({
-                container: container,
-                data: filteredEntries,
-                rowHeight: 48,
-                renderRow: renderRowHtml,
-                emptyMessage: 'No entries found matching your filters'
-            });
-        } else {
-            virtualTable.setData(filteredEntries);
-        }
-        
-        // Update scroll hint visibility
-        const hintEl = document.getElementById('scrollHint');
-        if (hintEl) {
-            hintEl.style.display = filteredEntries.length > 10 ? 'inline' : 'none';
-        }
+        tbody.innerHTML = pageEntries.map(entry => {
+            const validation = findValidationForEntry(entry, validationMap);
+            const status = validation?.status || 'UNKNOWN';
+            const isCutoff = validation?.isCutoff || false;
+            
+            // Status badge with reason tooltip
+            const reason = validation?.reason || '';
+            let statusBadge = '';
+            switch (status) {
+                case 'VALID':
+                    statusBadge = `<span class="badge badge-success" title="${reason}">✅ VALID</span>`;
+                    break;
+                case 'INVALID':
+                    statusBadge = `<span class="badge badge-danger" title="${reason}">❌ INVALID</span>`;
+                    break;
+                default:
+                    statusBadge = '<span class="badge badge-warning" title="Validation pending">⏳ PENDING</span>';
+            }
+            
+            if (isCutoff) {
+                statusBadge += ' <span class="badge badge-gray" title="Registered after 20:00 BRT cutoff">CUTOFF</span>';
+            }
+            
+            // Numbers
+            const numbersHtml = entry.numbers.map(n => {
+                const colorClass = AdminCore.getBallColorClass(n);
+                return `<span class="number-badge ${colorClass}" style="width: 24px; height: 24px; font-size: 0.6rem;">${String(n).padStart(2, '0')}</span>`;
+            }).join('');
+            
+            // Format timestamp
+            const formattedTime = entry.parsedDate
+                ? AdminCore.formatBrazilDateTime(entry.parsedDate, {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })
+                : entry.timestamp;
+            
+            // Recharge info
+            let rechargeInfo = '-';
+            if (validation?.matchedRecharge) {
+                const r = validation.matchedRecharge;
+                rechargeInfo = `<span class="text-success" style="font-size: 0.75rem;">
+                    R$${r.amount?.toFixed(2) || '?'}
+                </span>`;
+            }
+            
+            return `
+                <tr>
+                    <td>${statusBadge}</td>
+                    <td style="font-size: 0.8rem; white-space: nowrap;">${formattedTime}</td>
+                    <td><span class="badge badge-info">${entry.platform}</span></td>
+                    <td><strong>${entry.gameId}</strong></td>
+                    <td>${AdminCore.maskWhatsApp(entry.whatsapp)}</td>
+                    <td><div class="numbers-display">${numbersHtml}</div></td>
+                    <td>${entry.drawDate}</td>
+                    <td>${entry.contest}</td>
+                    <td style="font-size: 0.75rem;">${entry.ticketNumber}</td>
+                    <td>${rechargeInfo}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline" onclick="EntriesPage.showDetails('${entry.ticketNumber}')">
+                            Details
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
     }
 
-    /**
-     * Legacy function for backward compatibility
-     */
     function renderPagination() {
-        // No longer needed with virtual scrolling
+        const total = filteredEntries.length;
+        const totalPages = Math.ceil(total / perPage);
+        const start = (currentPage - 1) * perPage + 1;
+        const end = Math.min(currentPage * perPage, total);
+        
+        // Update info
+        document.getElementById('paginationInfo').textContent = 
+            `Showing ${total > 0 ? start : 0}-${end} of ${total} entries`;
+        
+        // Update buttons
+        document.getElementById('btnPrevPage').disabled = currentPage <= 1;
+        document.getElementById('btnNextPage').disabled = currentPage >= totalPages;
+        
+        // Page numbers
+        const pageNumbers = document.getElementById('pageNumbers');
+        if (pageNumbers) {
+            let html = '';
+            for (let i = 1; i <= Math.min(totalPages, 5); i++) {
+                html += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" 
+                    onclick="EntriesPage.goToPage(${i})">${i}</button>`;
+            }
+            if (totalPages > 5) {
+                html += `<span class="text-muted">... ${totalPages}</span>`;
+            }
+            pageNumbers.innerHTML = html;
+        }
     }
 
     // ============================================

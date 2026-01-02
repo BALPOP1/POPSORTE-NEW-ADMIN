@@ -21,10 +21,16 @@ window.DataFetcher = (function() {
     // ============================================
     
     /**
-     * Entries sheet: Contains all lottery ticket registrations
+     * Cloudflare Worker API Base URL
+     * Provides cached, edge-optimized access to data
+     */
+    const API_BASE_URL = 'https://popsorte-api.danilla-vargas1923.workers.dev';
+    
+    /**
+     * Entries endpoint: Returns all lottery ticket registrations (CSV)
      * Columns: Timestamp, Platform, Game ID, WhatsApp, Chosen Numbers, Draw Date, Contest, Ticket #, Status
      */
-    const ENTRIES_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1OttNYHiecAuGG6IRX7lW6lkG5ciEcL8gp3g6lNrN9H8/export?format=csv&gid=0';
+    const ENTRIES_API_URL = `${API_BASE_URL}/api/admin/entries`;
     
     /**
      * Recharge sheet: Contains recharge transactions
@@ -128,8 +134,8 @@ window.DataFetcher = (function() {
     // ============================================
     
     /**
-     * Fetch CSV data from Google Sheets with timeout and error handling
-     * @param {string} url - Sheet export URL
+     * Fetch CSV data from API with timeout and error handling
+     * @param {string} url - API endpoint URL
      * @returns {Promise<string>} Raw CSV text
      */
     async function fetchCSV(url) {
@@ -137,8 +143,11 @@ window.DataFetcher = (function() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
         
+        // Use ? or & depending on whether URL already has query params
+        const separator = url.includes('?') ? '&' : '?';
+        
         try {
-            const response = await fetch(`${url}&t=${Date.now()}`, {
+            const response = await fetch(`${url}${separator}t=${Date.now()}`, {
                 cache: 'no-store',
                 redirect: 'follow',
                 signal: controller.signal
@@ -203,7 +212,7 @@ window.DataFetcher = (function() {
     }
 
     /**
-     * Fetch all entries from Google Sheet
+     * Fetch all entries from Cloudflare Worker API
      * @param {boolean} forceRefresh - Force refresh ignoring cache
      * @returns {Promise<Object[]>} Array of entry objects
      */
@@ -224,7 +233,7 @@ window.DataFetcher = (function() {
         fetchLock.entries = true;
 
         try {
-            const csvText = await fetchCSV(ENTRIES_SHEET_URL);
+            const csvText = await fetchCSV(ENTRIES_API_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
 
             if (lines.length <= 1) {

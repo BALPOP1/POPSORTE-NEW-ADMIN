@@ -18,10 +18,16 @@ window.ResultsFetcher = (function() {
     // ============================================
     
     /**
-     * Results sheet: Contains official lottery results
+     * Cloudflare Worker API Base URL
+     * Provides cached, edge-optimized access to data
+     */
+    const API_BASE_URL = 'https://popsorte-api.danilla-vargas1923.workers.dev';
+    
+    /**
+     * Results endpoint: Returns official lottery results (CSV)
      * Columns: Contest, Draw Date, Number1, Number2, Number3, Number4, Number5, Saved At, Source
      */
-    const RESULTS_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1OttNYHiecAuGG6IRX7lW6lkG5ciEcL8gp3g6lNrN9H8/export?format=csv&gid=300277644';
+    const RESULTS_API_URL = `${API_BASE_URL}/api/admin/results`;
 
     /**
      * Cache TTL in milliseconds (3 minutes - matches refresh interval)
@@ -48,16 +54,19 @@ window.ResultsFetcher = (function() {
     // ============================================
     
     /**
-     * Fetch CSV data from Google Sheets with timeout
-     * @param {string} url - Sheet export URL
+     * Fetch CSV data from API with timeout
+     * @param {string} url - API endpoint URL
      * @returns {Promise<string>} Raw CSV text
      */
     async function fetchCSV(url) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
         
+        // Use ? or & depending on whether URL already has query params
+        const separator = url.includes('?') ? '&' : '?';
+        
         try {
-            const response = await fetch(`${url}&t=${Date.now()}`, {
+            const response = await fetch(`${url}${separator}t=${Date.now()}`, {
                 cache: 'no-store',
                 redirect: 'follow',
                 signal: controller.signal
@@ -154,7 +163,7 @@ window.ResultsFetcher = (function() {
     }
 
     /**
-     * Fetch all results from Google Sheet
+     * Fetch all results from Cloudflare Worker API
      * @param {boolean} forceRefresh - Force refresh ignoring cache
      * @returns {Promise<Object[]>} Array of result objects
      */
@@ -175,7 +184,7 @@ window.ResultsFetcher = (function() {
         fetchLock = true;
 
         try {
-            const csvText = await fetchCSV(RESULTS_SHEET_URL);
+            const csvText = await fetchCSV(RESULTS_API_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
 
             if (lines.length <= 1) {
