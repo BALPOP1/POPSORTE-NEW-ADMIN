@@ -80,23 +80,25 @@ window.AdminCore = (function() {
     // Brazil Timezone Utilities
     // ============================================
     
+    // Cached DateTimeFormat for getBrazilTime (performance optimization)
+    const brazilTimeFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+
     /**
      * Get current time in Brazil timezone (BRT)
      * @returns {Date} Date object representing current Brazil time
      */
     function getBrazilTime() {
         const now = new Date();
-        const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'America/Sao_Paulo',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: false
-        });
-        const parts = formatter.formatToParts(now);
+        const parts = brazilTimeFormatter.formatToParts(now);
         const year = parts.find(p => p.type === 'year').value;
         const month = parts.find(p => p.type === 'month').value;
         const day = parts.find(p => p.type === 'day').value;
@@ -122,23 +124,35 @@ window.AdminCore = (function() {
         });
     }
 
+    // Cached DateTimeFormat for Brazil date string (performance optimization)
+    const brazilDateFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Sao_Paulo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    });
+
     /**
      * Get date string in YYYY-MM-DD format for Brazil timezone
      * @param {Date} date - Date to format
-     * @returns {string} Date string in YYYY-MM-DD format
+     * @returns {string} Date string in YYYY-MM-DD format, or empty string if invalid
      */
     function getBrazilDateString(date) {
-        const formatter = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'America/Sao_Paulo',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        const parts = formatter.formatToParts(date);
-        const year = parts.find(p => p.type === 'year').value;
-        const month = parts.find(p => p.type === 'month').value;
-        const day = parts.find(p => p.type === 'day').value;
-        return `${year}-${month}-${day}`;
+        // Validate date before formatting to prevent RangeError
+        if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+            return '';
+        }
+        
+        try {
+            const parts = brazilDateFormatter.formatToParts(date);
+            const year = parts.find(p => p.type === 'year').value;
+            const month = parts.find(p => p.type === 'month').value;
+            const day = parts.find(p => p.type === 'day').value;
+            return `${year}-${month}-${day}`;
+        } catch (error) {
+            console.warn('getBrazilDateString: Invalid date provided', error);
+            return '';
+        }
     }
 
     /**

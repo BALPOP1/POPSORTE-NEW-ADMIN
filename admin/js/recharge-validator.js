@@ -464,21 +464,42 @@ window.RechargeValidator = (function() {
         const dailyData = [];
         const now = AdminCore.getBrazilTime();
         
+        // Pre-compute date strings for all entries (optimization)
+        const entriesByDate = new Map();
+        entries.forEach(e => {
+            if (e.parsedDate && e.parsedDate instanceof Date && !isNaN(e.parsedDate.getTime())) {
+                const dateStr = AdminCore.getBrazilDateString(e.parsedDate);
+                if (dateStr) {
+                    if (!entriesByDate.has(dateStr)) {
+                        entriesByDate.set(dateStr, []);
+                    }
+                    entriesByDate.get(dateStr).push(e);
+                }
+            }
+        });
+        
+        // Pre-compute date strings for all recharges (optimization)
+        const rechargesByDate = new Map();
+        recharges.forEach(r => {
+            if (r.rechargeTime && r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                const dateStr = AdminCore.getBrazilDateString(r.rechargeTime);
+                if (dateStr) {
+                    if (!rechargesByDate.has(dateStr)) {
+                        rechargesByDate.set(dateStr, []);
+                    }
+                    rechargesByDate.get(dateStr).push(r);
+                }
+            }
+        });
+        
         for (let i = 0; i < days; i++) {
             const date = new Date(now);
             date.setDate(date.getDate() - i);
             const dateStr = AdminCore.getBrazilDateString(date);
             
-            // Filter entries and recharges for this date
-            const dayEntries = entries.filter(e => {
-                if (!e.parsedDate) return false;
-                return AdminCore.getBrazilDateString(e.parsedDate) === dateStr;
-            });
-            
-            const dayRecharges = recharges.filter(r => {
-                if (!r.rechargeTime) return false;
-                return AdminCore.getBrazilDateString(r.rechargeTime) === dateStr;
-            });
+            // Use pre-computed maps instead of filtering entire arrays each time
+            const dayEntries = entriesByDate.get(dateStr) || [];
+            const dayRecharges = rechargesByDate.get(dateStr) || [];
             
             const engagement = analyzeEngagement(dayEntries, dayRecharges);
             

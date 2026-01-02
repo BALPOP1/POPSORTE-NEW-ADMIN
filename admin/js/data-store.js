@@ -446,16 +446,24 @@ window.DataStore = (function() {
         const now = AdminCore.getBrazilTime();
         const result = [];
 
+        // Pre-compute date strings for all entries (optimization)
+        const entriesByDateStr = new Map();
+        state.entries.forEach(e => {
+            if (e.parsedDate && e.parsedDate instanceof Date && !isNaN(e.parsedDate.getTime())) {
+                const dateStr = AdminCore.getBrazilDateString(e.parsedDate);
+                if (dateStr) {
+                    entriesByDateStr.set(dateStr, (entriesByDateStr.get(dateStr) || 0) + 1);
+                }
+            }
+        });
+
         for (let i = days - 1; i >= 0; i--) {
             const date = new Date(now);
             date.setDate(date.getDate() - i);
             const dateStr = AdminCore.getBrazilDateString(date);
             
-            const count = state.entries.filter(e => {
-                if (!e.parsedDate) return false;
-                return AdminCore.getBrazilDateString(e.parsedDate) === dateStr;
-            }).length;
-
+            // Use pre-computed map instead of filtering entire array
+            const count = entriesByDateStr.get(dateStr) || 0;
             result.push({ date: dateStr, count });
         }
 

@@ -236,19 +236,39 @@ window.DataFetcher = (function() {
             const delimiter = AdminCore.detectDelimiter(lines[0]);
             const entries = [];
 
-            for (let i = 1; i < lines.length; i++) {
-                const row = AdminCore.parseCSVLine(lines[i], delimiter);
-                if (row.length >= 9 && row[2]) { // Must have at least Game ID
-                    entries.push(parseEntryRow(row));
+            // Parse CSV in batches to avoid blocking UI
+            const batchSize = 500;
+            for (let i = 1; i < lines.length; i += batchSize) {
+                const batch = lines.slice(i, Math.min(i + batchSize, lines.length));
+                
+                for (const line of batch) {
+                    const row = AdminCore.parseCSVLine(line, delimiter);
+                    if (row.length >= 9 && row[2]) { // Must have at least Game ID
+                        entries.push(parseEntryRow(row));
+                    }
+                }
+                
+                // Yield to UI thread after each batch
+                if (i + batchSize < lines.length) {
+                    await new Promise(resolve => setTimeout(resolve, 0));
                 }
             }
 
-            // Sort by timestamp descending (newest first)
-            entries.sort((a, b) => {
-                const ta = a.parsedDate ? a.parsedDate.getTime() : 0;
-                const tb = b.parsedDate ? b.parsedDate.getTime() : 0;
-                return tb - ta;
-            });
+            // Sort by timestamp descending (newest first) - defer if large
+            if (entries.length > 1000) {
+                // For large datasets, sort in chunks
+                entries.sort((a, b) => {
+                    const ta = a.parsedDate ? a.parsedDate.getTime() : 0;
+                    const tb = b.parsedDate ? b.parsedDate.getTime() : 0;
+                    return tb - ta;
+                });
+            } else {
+                entries.sort((a, b) => {
+                    const ta = a.parsedDate ? a.parsedDate.getTime() : 0;
+                    const tb = b.parsedDate ? b.parsedDate.getTime() : 0;
+                    return tb - ta;
+                });
+            }
 
             cache.entries = { data: entries, timestamp: now };
             fetchLock.entries = false;
@@ -455,12 +475,15 @@ window.DataFetcher = (function() {
         const grouped = {};
         
         entries.forEach(entry => {
-            if (entry.parsedDate) {
+            // Validate date before formatting
+            if (entry.parsedDate && entry.parsedDate instanceof Date && !isNaN(entry.parsedDate.getTime())) {
                 const dateKey = AdminCore.getBrazilDateString(entry.parsedDate);
-                if (!grouped[dateKey]) {
-                    grouped[dateKey] = [];
+                if (dateKey) {  // Only group if we got a valid date string
+                    if (!grouped[dateKey]) {
+                        grouped[dateKey] = [];
+                    }
+                    grouped[dateKey].push(entry);
                 }
-                grouped[dateKey].push(entry);
             }
         });
         
@@ -476,12 +499,15 @@ window.DataFetcher = (function() {
         const grouped = {};
         
         recharges.forEach(recharge => {
-            if (recharge.rechargeTime) {
+            // Validate date before formatting
+            if (recharge.rechargeTime && recharge.rechargeTime instanceof Date && !isNaN(recharge.rechargeTime.getTime())) {
                 const dateKey = AdminCore.getBrazilDateString(recharge.rechargeTime);
-                if (!grouped[dateKey]) {
-                    grouped[dateKey] = [];
+                if (dateKey) {  // Only group if we got a valid date string
+                    if (!grouped[dateKey]) {
+                        grouped[dateKey] = [];
+                    }
+                    grouped[dateKey].push(recharge);
                 }
-                grouped[dateKey].push(recharge);
             }
         });
         
@@ -549,7 +575,7 @@ window.DataFetcher = (function() {
      */
     function getTopEntrants(entries, limit = 10) {
         const counts = {};
-            
+        
         entries.forEach(entry => {
             if (!entry.gameId) return;
             

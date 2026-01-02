@@ -385,18 +385,32 @@ window.WinnerCalculator = (function() {
      * @returns {Object} Comparison data
      */
     function compareTicketCreators(entries, date1, date2) {
+        // Validate input dates to prevent RangeError
+        const isValidDate = (d) => d && d instanceof Date && !isNaN(d.getTime());
+        
+        if (!isValidDate(date1) || !isValidDate(date2)) {
+            console.warn('compareTicketCreators: Invalid date(s) provided');
+            return {
+                date1: { date: '', displayDate: '—', uniqueCreators: 0, totalTickets: 0 },
+                date2: { date: '', displayDate: '—', uniqueCreators: 0, totalTickets: 0 },
+                change: 0,
+                changePercent: 0
+            };
+        }
+        
         const dateStr1 = AdminCore.getBrazilDateString(date1);
         const dateStr2 = AdminCore.getBrazilDateString(date2);
         
-        const entries1 = entries.filter(e => {
-            if (!e.parsedDate) return false;
-            return AdminCore.getBrazilDateString(e.parsedDate) === dateStr1;
-        });
+        // Pre-compute date strings for all entries with valid dates to avoid repeated calls
+        const entriesWithDateStr = entries
+            .filter(e => e.parsedDate && e.parsedDate instanceof Date && !isNaN(e.parsedDate.getTime()))
+            .map(e => ({
+                ...e,
+                _dateStr: AdminCore.getBrazilDateString(e.parsedDate)
+            }));
         
-        const entries2 = entries.filter(e => {
-            if (!e.parsedDate) return false;
-            return AdminCore.getBrazilDateString(e.parsedDate) === dateStr2;
-        });
+        const entries1 = entriesWithDateStr.filter(e => e._dateStr === dateStr1);
+        const entries2 = entriesWithDateStr.filter(e => e._dateStr === dateStr2);
         
         const creators1 = new Set(entries1.map(e => e.gameId).filter(Boolean));
         const creators2 = new Set(entries2.map(e => e.gameId).filter(Boolean));
@@ -439,16 +453,27 @@ window.WinnerCalculator = (function() {
         const dailyData = [];
         const now = AdminCore.getBrazilTime();
         
+        // Pre-compute date strings for all entries with valid dates (optimization)
+        const entriesByDateStr = new Map();
+        entries.forEach(e => {
+            if (e.parsedDate && e.parsedDate instanceof Date && !isNaN(e.parsedDate.getTime())) {
+                const dateStr = AdminCore.getBrazilDateString(e.parsedDate);
+                if (dateStr) {
+                    if (!entriesByDateStr.has(dateStr)) {
+                        entriesByDateStr.set(dateStr, []);
+                    }
+                    entriesByDateStr.get(dateStr).push(e);
+                }
+            }
+        });
+        
         for (let i = 0; i < days; i++) {
             const date = new Date(now);
             date.setDate(date.getDate() - i);
             const dateStr = AdminCore.getBrazilDateString(date);
             
-            const dayEntries = entries.filter(e => {
-                if (!e.parsedDate) return false;
-                return AdminCore.getBrazilDateString(e.parsedDate) === dateStr;
-            });
-            
+            // Use pre-computed map instead of filtering entire array each time
+            const dayEntries = entriesByDateStr.get(dateStr) || [];
             const creators = new Set(dayEntries.map(e => e.gameId).filter(Boolean));
             
             dailyData.push({
