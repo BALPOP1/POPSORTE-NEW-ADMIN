@@ -472,26 +472,33 @@ window.DataStore = (function() {
 
     /**
      * Get entries grouped by platform with counts
+     * Dynamically detects all platforms from data
      * @param {Object[]} entries - All entries
-     * @returns {Object} Platform breakdown { POPN1: { count, entries }, POPLUZ: { count, entries } }
+     * @returns {Object} Platform breakdown { PLATFORM_CODE: { count, entries } }
      */
     function getEntriesByPlatform(entries) {
-        const breakdown = {
-            POPN1: { count: 0, entries: [] },
-            POPLUZ: { count: 0, entries: [] }
-        };
+        const breakdown = {};
         
         entries.forEach(e => {
             const platform = (e.platform || 'POPN1').toUpperCase();
-            if (breakdown[platform]) {
-                breakdown[platform].count++;
-                breakdown[platform].entries.push(e);
-            } else {
-                // Default to POPN1 if unknown platform
-                breakdown.POPN1.count++;
-                breakdown.POPN1.entries.push(e);
+            
+            // Create platform entry if it doesn't exist
+            if (!breakdown[platform]) {
+                breakdown[platform] = { count: 0, entries: [] };
             }
+            
+            breakdown[platform].count++;
+            breakdown[platform].entries.push(e);
         });
+        
+        // Ensure default platforms exist even if empty
+        if (typeof AdminCore !== 'undefined' && AdminCore.PLATFORM_CONFIG) {
+            Object.keys(AdminCore.PLATFORM_CONFIG).forEach(platform => {
+                if (!breakdown[platform]) {
+                    breakdown[platform] = { count: 0, entries: [] };
+                }
+            });
+        }
         
         return breakdown;
     }
