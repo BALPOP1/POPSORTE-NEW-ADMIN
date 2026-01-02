@@ -372,6 +372,28 @@ a:hover {
     margin-left: 8px;
 }
 
+/* Platform Logo Images */
+.platform-btn .platform-logo-img {
+    height: 28px;
+    width: auto;
+    max-width: 120px;
+    display: block;
+    object-fit: contain;
+    pointer-events: none;
+    filter: brightness(0.9) contrast(1.1);
+    transition: all var(--transition);
+}
+
+.platform-btn:hover .platform-logo-img {
+    filter: brightness(1) contrast(1.2);
+    transform: scale(1.05);
+}
+
+.platform-btn.active .platform-logo-img {
+    filter: brightness(1.1) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    transform: scale(1.02);
+}
+
 /* Platform-specific colors */
 .platform-btn[data-platform="POPN1"].active {
     background: linear-gradient(135deg, #8b5cf6, #6d28d9);
@@ -1679,6 +1701,11 @@ a:hover {
     
     .platform-btn {
         padding: 8px 12px;
+    }
+    
+    .platform-btn .platform-logo-img {
+        height: 24px;
+        max-width: 80px;
     }
     
     .page-container {
