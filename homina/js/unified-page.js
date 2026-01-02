@@ -342,25 +342,32 @@ window.UnifiedPage = (function() {
         const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
         
         if (pageEntries.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No entries found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No entries found</td></tr>';
             return;
         }
         
         tbody.innerHTML = pageEntries.map(entry => {
             const validation = validationMap.get(entry.ticketNumber);
             const status = validation?.status || 'UNKNOWN';
+            const isCutoff = validation?.isCutoff || false;
             
+            // Status badge with cutoff indicator
             let statusBadge = '';
             switch (status) {
                 case 'VALID': statusBadge = '<span class="badge badge-success">✅ VALID</span>'; break;
                 case 'INVALID': statusBadge = '<span class="badge badge-danger">❌ INVALID</span>'; break;
                 default: statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
             }
+            if (isCutoff) {
+                statusBadge += ' <span class="badge badge-warning" style="margin-left:4px">⚠️ CUTOFF</span>';
+            }
             
+            // Format date/time
             const formattedTime = entry.parsedDate
-                ? AdminCore.formatBrazilDateTime(entry.parsedDate, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                ? AdminCore.formatBrazilDateTime(entry.parsedDate, { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
                 : entry.timestamp;
             
+            // Render number badges
             const numbersHtml = entry.numbers.slice(0, 5).map(n => {
                 const colorClass = AdminCore.getBallColorClass(n);
                 return `<span class="number-badge ${colorClass}" style="width:24px;height:24px;font-size:0.6rem">${String(n).padStart(2,'0')}</span>`;
@@ -368,14 +375,43 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
+            // Enhanced recharge info display (similar to admin page)
+            let rechargeInfo = '';
+            if (validation?.matchedRecharge) {
+                const r = validation.matchedRecharge;
+                const rechargeId = r.rechargeId || '';
+                const shortId = rechargeId.length > 18 ? rechargeId.substring(0, 18) + '...' : rechargeId;
+                const rechargeTime = r.rechargeTimeObj 
+                    ? AdminCore.formatBrazilDateTime(r.rechargeTimeObj, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                    : (r.rechargeTime || '-');
+                const amount = r.amount ? `R$ ${r.amount.toFixed(2)}` : '-';
+                
+                rechargeInfo = `
+                    <div class="recharge-details">
+                        <div class="recharge-id" title="${rechargeId}">${shortId}</div>
+                        <div class="recharge-time">${rechargeTime}</div>
+                        <div class="recharge-amount"><strong>${amount}</strong></div>
+                    </div>
+                `;
+            } else {
+                rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">No recharge found</span>';
+            }
+            
+            // WhatsApp masked display
+            const whatsappDisplay = AdminCore.maskWhatsApp(entry.whatsapp);
+            
             return `
                 <tr>
                     <td>${statusBadge}</td>
                     <td style="font-size:0.8rem;white-space:nowrap">${formattedTime}</td>
                     <td><span class="platform-badge ${platform.toLowerCase()}">${platform}</span></td>
                     <td><strong>${entry.gameId}</strong></td>
+                    <td style="font-size:0.75rem">${whatsappDisplay}</td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
-                    <td>${entry.contest}</td>
+                    <td style="font-size:0.8rem">${entry.drawDate || '-'}</td>
+                    <td><span class="badge badge-info">${entry.contest}</span></td>
+                    <td style="font-size:0.7rem">${entry.ticketNumber}</td>
+                    <td>${rechargeInfo}</td>
                     <td><button class="btn btn-sm btn-outline" onclick="UnifiedPage.showTicketDetails('${entry.ticketNumber}')">Details</button></td>
                 </tr>
             `;
@@ -417,34 +453,101 @@ window.UnifiedPage = (function() {
         const modalContent = document.getElementById('ticketModalContent');
         if (!modalContent) return;
         
+        // Validation status banner
         let statusHtml = '';
         if (validation) {
             const status = validation.status;
+            const isCutoff = validation.isCutoff || false;
             const statusClass = { 'VALID': 'success', 'INVALID': 'danger' }[status] || 'warning';
             statusHtml = `<div class="status-banner ${statusClass} mb-4">
                 <span class="status-banner-icon">${status === 'VALID' ? '✅' : status === 'INVALID' ? '❌' : '⏳'}</span>
-                <span class="status-banner-text"><strong>${status}</strong> - ${validation.reason || 'Checking...'}</span>
+                <span class="status-banner-text">
+                    <strong>${status}</strong> - ${validation.reason || 'Checking...'}
+                    ${isCutoff ? '<br><span class="text-warning">⚠️ Registered after 20:00 BRT cutoff</span>' : ''}
+                </span>
             </div>`;
         }
         
+        // Render number badges
         const numbersHtml = entry.numbers.map(n => {
             const colorClass = AdminCore.getBallColorClass(n);
             return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
         }).join('');
         
+        // Enhanced recharge information section
+        let rechargeHtml = '<p class="text-muted">No linked recharge found</p>';
+        if (validation?.matchedRecharge) {
+            const r = validation.matchedRecharge;
+            const rechargeTimeFormatted = r.rechargeTimeObj 
+                ? AdminCore.formatBrazilDateTime(r.rechargeTimeObj, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                : (r.rechargeTime || '-');
+            
+            rechargeHtml = `
+                <div class="ticket-info-grid">
+                    <div class="ticket-info-item">
+                        <span class="label">💰 Amount</span>
+                        <span class="value text-success"><strong>R$ ${r.amount ? r.amount.toFixed(2) : '?'}</strong></span>
+                    </div>
+                    <div class="ticket-info-item">
+                        <span class="label">🔑 Recharge ID</span>
+                        <span class="value" style="font-size:0.7rem;word-break:break-all">${r.rechargeId || '-'}</span>
+                    </div>
+                    <div class="ticket-info-item">
+                        <span class="label">⏰ Recharge Time</span>
+                        <span class="value">${rechargeTimeFormatted}</span>
+                    </div>
+                    <div class="ticket-info-item">
+                        <span class="label">🎮 Game ID (Recharge)</span>
+                        <span class="value">${r.gameId || '-'}</span>
+                    </div>
+                </div>
+            `;
+        }
+        
         modalContent.innerHTML = `
             ${statusHtml}
-            <h4 class="mb-3">Ticket Information</h4>
+            
+            <h4 class="mb-3">📋 Ticket Information</h4>
             <div class="ticket-info-grid mb-4">
-                <div class="ticket-info-item"><span class="label">Ticket #</span><span class="value">${entry.ticketNumber}</span></div>
-                <div class="ticket-info-item"><span class="label">Game ID</span><span class="value">${entry.gameId}</span></div>
-                <div class="ticket-info-item"><span class="label">Platform</span><span class="value">${entry.platform}</span></div>
-                <div class="ticket-info-item"><span class="label">Contest</span><span class="value">${entry.contest}</span></div>
-                <div class="ticket-info-item"><span class="label">Draw Date</span><span class="value">${entry.drawDate}</span></div>
-                <div class="ticket-info-item"><span class="label">Registered</span><span class="value">${entry.parsedDate ? AdminCore.formatBrazilDateTime(entry.parsedDate) : entry.timestamp}</span></div>
+                <div class="ticket-info-item">
+                    <span class="label">Ticket Number</span>
+                    <span class="value">${entry.ticketNumber}</span>
+                </div>
+                <div class="ticket-info-item">
+                    <span class="label">Game ID</span>
+                    <span class="value"><strong>${entry.gameId}</strong></span>
+                </div>
+                <div class="ticket-info-item">
+                    <span class="label">WhatsApp</span>
+                    <span class="value">${entry.whatsapp || '-'}</span>
+                </div>
+                <div class="ticket-info-item">
+                    <span class="label">Platform</span>
+                    <span class="value"><span class="platform-badge ${(entry.platform || 'POPN1').toLowerCase()}">${entry.platform || 'POPN1'}</span></span>
+                </div>
+                <div class="ticket-info-item">
+                    <span class="label">Contest</span>
+                    <span class="value"><span class="badge badge-info">${entry.contest}</span></span>
+                </div>
+                <div class="ticket-info-item">
+                    <span class="label">Draw Date</span>
+                    <span class="value">${entry.drawDate || '-'}</span>
+                </div>
+                <div class="ticket-info-item">
+                    <span class="label">Registered</span>
+                    <span class="value">${entry.parsedDate ? AdminCore.formatBrazilDateTime(entry.parsedDate) : entry.timestamp}</span>
+                </div>
+                <div class="ticket-info-item">
+                    <span class="label">Original Status</span>
+                    <span class="value">${entry.status || 'N/A'}</span>
+                </div>
             </div>
-            <h4 class="mb-3">Selected Numbers</h4>
+            
+            <h4 class="mb-3">🎲 Selected Numbers</h4>
             <div class="numbers-display mb-4">${numbersHtml}</div>
+            
+            <h4 class="mb-3">💳 Linked Recharge</h4>
+            ${rechargeHtml}
         `;
         
         AdminCore.openModal('ticketModal');
