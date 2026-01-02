@@ -41,6 +41,28 @@ window.UnifiedPage = (function() {
         contest: '',
         validity: 'all'
     };
+    let sortBy = 'date-desc'; // Default: newest first
+    
+    /**
+     * Check if entry was registered after cutoff time (20:00 BRT, 16:00 on Dec 24/31)
+     * @param {Object} entry - Entry object with parsedDate
+     * @returns {boolean} True if after cutoff
+     */
+    function isEntryCutoff(entry) {
+        if (!entry.parsedDate || !(entry.parsedDate instanceof Date) || isNaN(entry.parsedDate.getTime())) {
+            return false;
+        }
+        
+        const regHour = entry.parsedDate.getHours();
+        const month = entry.parsedDate.getMonth();
+        const day = entry.parsedDate.getDate();
+        
+        // Check for early cutoff days (Dec 24, Dec 31)
+        const isEarlyCutoffDay = month === 11 && (day === 24 || day === 31);
+        const cutoffHour = isEarlyCutoffDay ? 16 : 20;
+        
+        return regHour >= cutoffHour;
+    }
     
     // Results state
     let filteredResults = [];
@@ -275,7 +297,7 @@ window.UnifiedPage = (function() {
             });
         }
         
-        // Stats - ✅ COUNT DIRECTLY FROM CSV STATUS COLUMN
+        // Stats - ✅ COUNT DIRECTLY FROM CSV STATUS COLUMN + CUTOFF DETECTION
         const validCount = entries.filter(e => {
             const status = (e.status || '').toUpperCase();
             return status === 'VALID' || status === 'VÁLIDO';
@@ -286,9 +308,11 @@ window.UnifiedPage = (function() {
             return status === 'INVALID' || status === 'INVÁLIDO';
         }).length;
         
+        const cutoffCount = entries.filter(e => isEntryCutoff(e)).length;
+        
         document.getElementById('statValid').textContent = validCount.toLocaleString();
         document.getElementById('statInvalid').textContent = invalidCount.toLocaleString();
-        document.getElementById('statCutoff').textContent = '0'; // No cutoff tracking from CSV
+        document.getElementById('statCutoff').textContent = cutoffCount.toLocaleString();
         
         // Show platform-filtered recharge count
         document.getElementById('statRechargesCount').textContent = recharges.length.toLocaleString();
@@ -358,6 +382,54 @@ window.UnifiedPage = (function() {
             });
         }
         
+        // ✅ APPLY SORTING
+        switch (sortBy) {
+            case 'date-asc':
+                result.sort((a, b) => {
+                    if (!a.parsedDate || !b.parsedDate) return 0;
+                    return a.parsedDate.getTime() - b.parsedDate.getTime();
+                });
+                break;
+            case 'date-desc':
+                result.sort((a, b) => {
+                    if (!a.parsedDate || !b.parsedDate) return 0;
+                    return b.parsedDate.getTime() - a.parsedDate.getTime();
+                });
+                break;
+            case 'cutoff-yes':
+                result.sort((a, b) => {
+                    const aCutoff = isEntryCutoff(a) ? 1 : 0;
+                    const bCutoff = isEntryCutoff(b) ? 1 : 0;
+                    return bCutoff - aCutoff; // Cutoff first
+                });
+                break;
+            case 'cutoff-no':
+                result.sort((a, b) => {
+                    const aCutoff = isEntryCutoff(a) ? 1 : 0;
+                    const bCutoff = isEntryCutoff(b) ? 1 : 0;
+                    return aCutoff - bCutoff; // No cutoff first
+                });
+                break;
+            case 'status-valid':
+                result.sort((a, b) => {
+                    const aStatus = (a.status || '').toUpperCase();
+                    const bStatus = (b.status || '').toUpperCase();
+                    const aValid = (aStatus === 'VALID' || aStatus === 'VÁLIDO') ? 1 : 0;
+                    const bValid = (bStatus === 'VALID' || bStatus === 'VÁLIDO') ? 1 : 0;
+                    return bValid - aValid; // Valid first
+                });
+                break;
+            case 'status-invalid':
+                result.sort((a, b) => {
+                    const aStatus = (a.status || '').toUpperCase();
+                    const bStatus = (b.status || '').toUpperCase();
+                    const aInvalid = (aStatus === 'INVALID' || aStatus === 'INVÁLIDO') ? 1 : 0;
+                    const bInvalid = (bStatus === 'INVALID' || bStatus === 'INVÁLIDO') ? 1 : 0;
+                    return bInvalid - aInvalid; // Invalid first
+                });
+                break;
+        }
+        
         filteredEntries = result;
         entriesPage = 1;
         renderEntriesTable();
@@ -397,14 +469,18 @@ window.UnifiedPage = (function() {
             const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
             const status = csvStatus;
             
+            // Check for CUTOFF (registered after 20:00 BRT)
+            const isCutoff = isEntryCutoff(entry);
+            
             // Debug ONLY first entry to avoid performance issues
             if (index === 0) {
                 console.log('🎯 FIRST ENTRY:', entry.gameId, entry.ticketNumber);
                 console.log('   CSV Status:', entry.status);
                 console.log('   Parsed Status:', status);
+                console.log('   Is Cutoff:', isCutoff);
             }
             
-            // Status badge based on CSV column
+            // Status badge based on CSV column + CUTOFF indicator
             let statusBadge = '';
             switch (status) {
                 case 'VALID':
@@ -417,6 +493,11 @@ window.UnifiedPage = (function() {
                     break;
                 default:
                     statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
+            }
+            
+            // Add CUTOFF badge if applicable
+            if (isCutoff) {
+                statusBadge += ' <span class="badge badge-warning" style="margin-left:4px; font-size:0.75rem">⚠️ CUTOFF</span>';
             }
             
             // Format date/time
@@ -432,8 +513,8 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // RECHARGE INFO - DIRECT MATCH BY GAME ID (FUCK THE VALIDATION SYSTEM)
-            let rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">No recharge found</span>';
+            // RECHARGE INFO - DIRECT MATCH BY GAME ID
+            let rechargeInfo = '<span class="text-muted" style="font-size:0.85rem">No recharge found</span>';
             
             try {
                 // Find recharge directly by matching gameId
@@ -507,7 +588,7 @@ window.UnifiedPage = (function() {
                     <td><div class="numbers-display">${numbersHtml}</div></td>
                     <td style="font-size:0.8rem">${entry.drawDate || '-'}</td>
                     <td><span class="badge badge-info">${entry.contest}</span></td>
-                    <td style="font-size:0.7rem">${entry.ticketNumber}</td>
+                    <td style="font-size:0.9rem">${entry.ticketNumber}</td>
                     <td>${rechargeInfo}</td>
                     <td><button class="btn btn-sm btn-outline" onclick="UnifiedPage.showTicketDetails('${entry.ticketNumber}')">Details</button></td>
                 </tr>
@@ -558,14 +639,17 @@ window.UnifiedPage = (function() {
         // ✅ VALIDATION STATUS - READ DIRECTLY FROM CSV (Column H - STATUS)
         const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
         const status = csvStatus;
+        const isCutoff = isEntryCutoff(entry);
         const statusClass = { 'VALID': 'success', 'INVALID': 'danger', 'VÁLIDO': 'success', 'INVÁLIDO': 'danger' }[csvStatus] || 'warning';
         const statusIcon = (status === 'VALID' || status === 'VÁLIDO') ? '✅' : (status === 'INVALID' || status === 'INVÁLIDO') ? '❌' : '⏳';
         const statusText = (status === 'VALID' || status === 'VÁLIDO') ? 'VALID' : (status === 'INVALID' || status === 'INVÁLIDO') ? 'INVALID' : 'PENDING';
         
+        const cutoffWarning = isCutoff ? '<br><span class="text-warning">⚠️ Registered after cutoff time (20:00 BRT)</span>' : '';
+        
         const statusHtml = `<div class="status-banner ${statusClass} mb-4">
             <span class="status-banner-icon">${statusIcon}</span>
             <span class="status-banner-text">
-                <strong>${statusText}</strong> - Status from CSV
+                <strong>${statusText}</strong> - Status from CSV${cutoffWarning}
             </span>
         </div>`;
         
@@ -1048,12 +1132,15 @@ window.UnifiedPage = (function() {
         document.getElementById('filterWhatsapp')?.addEventListener('input', (e) => { entriesFilters.whatsapp = e.target.value; debouncedEntriesFilter(); });
         document.getElementById('filterContest')?.addEventListener('change', (e) => { entriesFilters.contest = e.target.value; applyEntriesFilters(); });
         document.getElementById('filterValidity')?.addEventListener('change', (e) => { entriesFilters.validity = e.target.value; applyEntriesFilters(); });
+        document.getElementById('sortBy')?.addEventListener('change', (e) => { sortBy = e.target.value; applyEntriesFilters(); });
         document.getElementById('btnClearFilters')?.addEventListener('click', () => {
             entriesFilters = { gameId: '', whatsapp: '', contest: '', validity: 'all' };
+            sortBy = 'date-desc';
             document.getElementById('filterGameId').value = '';
             document.getElementById('filterWhatsapp').value = '';
             document.getElementById('filterContest').value = '';
             document.getElementById('filterValidity').value = 'all';
+            document.getElementById('sortBy').value = 'date-desc';
             applyEntriesFilters();
         });
         document.getElementById('btnExportCSV')?.addEventListener('click', exportEntriesCSV);
