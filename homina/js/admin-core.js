@@ -46,6 +46,13 @@ window.AdminCore = (function() {
             color: 'warning',
             title: 'POPLUZ Platform'
         }
+        'POPNEW': {
+            name: 'POPNEW',
+            icon: '🤑',
+            prizePool: 1500,
+            color: 'warning',
+            title: 'POPNEW Platform'
+        }
         // To add a new platform, simply add an entry here:
         // 'POPNEW': {
         //     name: 'POPNEW',
