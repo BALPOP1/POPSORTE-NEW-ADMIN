@@ -262,6 +262,19 @@ window.UnifiedPage = (function() {
     async function renderEntries() {
         const { entries, recharges, allRecharges, validationResults } = currentData;
         
+        // Debug: Check data availability
+        console.log('renderEntries: entries=', entries.length, 'recharges=', recharges.length, 'allRecharges=', allRecharges.length);
+        console.log('renderEntries: validationResults=', validationResults ? 'available' : 'MISSING');
+        
+        if (validationResults && entries.length > 0) {
+            const sampleEntry = entries[0];
+            console.log('renderEntries: Sample entry:', {
+                ticketNumber: sampleEntry.ticketNumber,
+                gameId: sampleEntry.gameId,
+                hasBoundRecharge: !!sampleEntry.boundRecharge
+            });
+        }
+        
         // Stats
         if (validationResults) {
             document.getElementById('statValid').textContent = validationResults.stats.valid.toLocaleString();
@@ -346,10 +359,23 @@ window.UnifiedPage = (function() {
             return;
         }
         
-        tbody.innerHTML = pageEntries.map(entry => {
+        tbody.innerHTML = pageEntries.map((entry, index) => {
             const validation = validationMap.get(entry.ticketNumber);
             const status = validation?.status || 'UNKNOWN';
             const isCutoff = validation?.isCutoff || false;
+            
+            // Debug first entry
+            if (index === 0) {
+                console.log('First entry rendering:', {
+                    ticketNumber: entry.ticketNumber,
+                    gameId: entry.gameId,
+                    hasValidation: !!validation,
+                    validationStatus: status,
+                    hasMatchedRecharge: !!validation?.matchedRecharge,
+                    hasBoundRecharge: !!entry.boundRecharge,
+                    matchedRecharge: validation?.matchedRecharge
+                });
+            }
             
             // Status badge with cutoff indicator
             let statusBadge = '';
@@ -375,22 +401,39 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // Enhanced recharge info display (similar to admin page)
+            // Enhanced recharge info display (admin-compatible)
             let rechargeInfo = '';
-            if (validation?.matchedRecharge) {
-                const r = validation.matchedRecharge;
-                const rechargeId = r.rechargeId || '';
-                const shortId = rechargeId.length > 18 ? rechargeId.substring(0, 18) + '...' : rechargeId;
-                const rechargeTime = r.rechargeTime instanceof Date
-                    ? AdminCore.formatBrazilDateTime(r.rechargeTime, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-                    : (r.rechargeTimeRaw || '-');
-                const amount = r.amount ? `R$ ${r.amount.toFixed(2)}` : '-';
+            
+            // Try multiple ways to get recharge data (admin uses boundRecharge)
+            const rechargeData = validation?.matchedRecharge || entry.boundRecharge || null;
+            
+            if (rechargeData) {
+                const rechargeId = rechargeData.rechargeId || rechargeData.boundRechargeId || '';
+                const shortId = rechargeId.length > 16 ? rechargeId.substring(0, 16) + '...' : rechargeId;
+                
+                // Get time - try multiple formats
+                let timeDisplay = '-';
+                if (rechargeData.rechargeTime) {
+                    if (rechargeData.rechargeTime instanceof Date) {
+                        timeDisplay = AdminCore.formatBrazilDateTime(rechargeData.rechargeTime, { 
+                            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
+                        });
+                    } else if (typeof rechargeData.rechargeTime === 'string') {
+                        timeDisplay = rechargeData.rechargeTime;
+                    }
+                } else if (rechargeData.boundRechargeTime) {
+                    timeDisplay = rechargeData.boundRechargeTime;
+                }
+                
+                // Get amount - try multiple formats
+                const amount = rechargeData.amount || rechargeData.boundRechargeAmount || 0;
+                const amountDisplay = amount > 0 ? `R$ ${amount.toFixed(2)}` : '-';
                 
                 rechargeInfo = `
                     <div class="recharge-details">
                         <div class="recharge-id" title="${rechargeId}">${shortId}</div>
-                        <div class="recharge-time">${rechargeTime}</div>
-                        <div class="recharge-amount"><strong>${amount}</strong></div>
+                        <div class="recharge-time">${timeDisplay}</div>
+                        <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
                     </div>
                 `;
             } else {
@@ -474,31 +517,52 @@ window.UnifiedPage = (function() {
             return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
         }).join('');
         
-        // Enhanced recharge information section
+        // Enhanced recharge information section (admin-compatible)
         let rechargeHtml = '<p class="text-muted">No linked recharge found</p>';
-        if (validation?.matchedRecharge) {
-            const r = validation.matchedRecharge;
-            const rechargeTimeFormatted = r.rechargeTime instanceof Date
-                ? AdminCore.formatBrazilDateTime(r.rechargeTime, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-                : (r.rechargeTimeRaw || '-');
+        
+        // Try multiple ways to get recharge data
+        const rechargeData = validation?.matchedRecharge || entry.boundRecharge || null;
+        
+        if (rechargeData) {
+            // Get time - try multiple formats
+            let timeDisplay = '-';
+            if (rechargeData.rechargeTime) {
+                if (rechargeData.rechargeTime instanceof Date) {
+                    timeDisplay = AdminCore.formatBrazilDateTime(rechargeData.rechargeTime, { 
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' 
+                    });
+                } else if (typeof rechargeData.rechargeTime === 'string') {
+                    timeDisplay = rechargeData.rechargeTime;
+                }
+            } else if (rechargeData.boundRechargeTime) {
+                timeDisplay = rechargeData.boundRechargeTime;
+            }
+            
+            // Get amount
+            const amount = rechargeData.amount || rechargeData.boundRechargeAmount || 0;
+            const amountDisplay = amount > 0 ? `R$ ${amount.toFixed(2)}` : '?';
+            
+            // Get IDs
+            const rechargeId = rechargeData.rechargeId || rechargeData.boundRechargeId || '-';
+            const gameId = rechargeData.gameId || entry.gameId || '-';
             
             rechargeHtml = `
                 <div class="ticket-info-grid">
                     <div class="ticket-info-item">
                         <span class="label">💰 Amount</span>
-                        <span class="value text-success"><strong>R$ ${r.amount ? r.amount.toFixed(2) : '?'}</strong></span>
+                        <span class="value text-success"><strong>${amountDisplay}</strong></span>
                     </div>
                     <div class="ticket-info-item">
                         <span class="label">🔑 Recharge ID</span>
-                        <span class="value" style="font-size:0.7rem;word-break:break-all">${r.rechargeId || '-'}</span>
+                        <span class="value" style="font-size:0.7rem;word-break:break-all">${rechargeId}</span>
                     </div>
                     <div class="ticket-info-item">
                         <span class="label">⏰ Recharge Time</span>
-                        <span class="value">${rechargeTimeFormatted}</span>
+                        <span class="value">${timeDisplay}</span>
                     </div>
                     <div class="ticket-info-item">
                         <span class="label">🎮 Game ID (Recharge)</span>
-                        <span class="value">${r.gameId || '-'}</span>
+                        <span class="value">${gameId}</span>
                     </div>
                 </div>
             `;
