@@ -355,44 +355,36 @@ window.UnifiedPage = (function() {
 
     function renderEntriesTable() {
         const tbody = document.getElementById('entriesTableBody');
-        if (!tbody) return;
+        if (!tbody) {
+            console.error('❌ entriesTableBody element not found!');
+            return;
+        }
         
         const start = (entriesPage - 1) * entriesPerPage;
         const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
+        
+        console.log(`📊 Rendering ${pageEntries.length} entries (page ${entriesPage}, start ${start})`);
         
         if (pageEntries.length === 0) {
             tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No entries found</td></tr>';
             return;
         }
         
-        tbody.innerHTML = pageEntries.map((entry, index) => {
-            // Find validation result by matching entry properties (more reliable than ticketNumber alone)
-            let validation = null;
-            if (validationResults && validationResults.results) {
-                validation = validationResults.results.find(v => 
-                    v.ticket?.gameId === entry.gameId && 
-                    v.ticket?.ticketNumber === entry.ticketNumber &&
-                    v.ticket?.timestamp === entry.timestamp
-                );
-            }
-            
+        try {
+            tbody.innerHTML = pageEntries.map((entry, index) => {
+            // Get validation from map (simple and fast)
+            const validation = validationMap.get(entry.ticketNumber);
             const status = validation?.status || 'UNKNOWN';
             const isCutoff = validation?.isCutoff || false;
             
-            // Debug first entry
+            // Debug ONLY first entry to avoid performance issues
             if (index === 0) {
-                console.log('===== FIRST ENTRY RENDERING =====');
-                console.log('Entry gameId:', entry.gameId, 'ticket:', entry.ticketNumber);
-                console.log('Validation found:', !!validation);
-                console.log('Validation status:', status);
-                console.log('Has matchedRecharge:', !!validation?.matchedRecharge);
+                console.log('🎯 FIRST ENTRY:', entry.gameId, entry.ticketNumber);
+                console.log('   Validation:', !!validation, 'Status:', status);
+                console.log('   Has recharge:', !!validation?.matchedRecharge);
                 if (validation?.matchedRecharge) {
-                    console.log('✅ MATCHED RECHARGE DATA:');
-                    console.log('  Order Number:', validation.matchedRecharge.rechargeId);
-                    console.log('  Amount:', validation.matchedRecharge.amount);
-                    console.log('  Time:', validation.matchedRecharge.rechargeTime);
+                    console.log('   ✅ Recharge:', validation.matchedRecharge.rechargeId?.substring(0, 20), 'Amount:', validation.matchedRecharge.amount);
                 }
-                console.log('==================================');
             }
             
             // Status badge with cutoff indicator
@@ -419,42 +411,49 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // RECHARGE INFO DISPLAY - Direct from validation matchedRecharge
-            let rechargeInfo = '';
+            // RECHARGE INFO DISPLAY - Direct from CSV via matchedRecharge
+            let rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">No recharge found</span>';
             
-            if (validation?.matchedRecharge) {
-                const r = validation.matchedRecharge;
-                
-                // ORDER NUMBER (rechargeId)
-                const orderNumber = r.rechargeId || '';
-                const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
-                
-                // CHARGE AMOUNT
-                const chargeAmount = r.amount || 0;
-                const amountDisplay = chargeAmount > 0 ? `R$ ${chargeAmount.toFixed(2)}` : 'R$ 0.00';
-                
-                // TIME (rechargeTime)
-                let timeDisplay = '-';
-                if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
-                    timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
-                        day: '2-digit', 
-                        month: '2-digit', 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                    });
-                } else if (r.rechargeTimeRaw) {
-                    timeDisplay = r.rechargeTimeRaw;
+            try {
+                if (validation && validation.matchedRecharge) {
+                    const r = validation.matchedRecharge;
+                    
+                    // ORDER NUMBER from CSV (Column 1)
+                    const orderNumber = r.rechargeId || '';
+                    const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
+                    
+                    // CHARGE AMOUNT from CSV (Column 8)
+                    const chargeAmount = r.amount || 0;
+                    const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
+                    
+                    // TIME from CSV (Column 5)
+                    let timeDisplay = '-';
+                    if (r.rechargeTime && r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                        try {
+                            timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                                day: '2-digit', 
+                                month: '2-digit', 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                            });
+                        } catch (e) {
+                            timeDisplay = r.rechargeTimeRaw || '-';
+                        }
+                    } else if (r.rechargeTimeRaw) {
+                        timeDisplay = r.rechargeTimeRaw;
+                    }
+                    
+                    rechargeInfo = `
+                        <div class="recharge-details">
+                            <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
+                            <div class="recharge-time">${timeDisplay}</div>
+                            <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
+                        </div>
+                    `;
                 }
-                
-                rechargeInfo = `
-                    <div class="recharge-details">
-                        <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
-                        <div class="recharge-time">${timeDisplay}</div>
-                        <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
-                    </div>
-                `;
-            } else {
-                rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">No recharge found</span>';
+            } catch (error) {
+                console.error('Error rendering recharge info:', error);
+                rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">Error loading recharge</span>';
             }
             
             // WhatsApp masked display
@@ -475,7 +474,13 @@ window.UnifiedPage = (function() {
                     <td><button class="btn btn-sm btn-outline" onclick="UnifiedPage.showTicketDetails('${entry.ticketNumber}')">Details</button></td>
                 </tr>
             `;
-        }).join('');
+            }).join('');
+            
+            console.log('✅ Table HTML generated successfully');
+        } catch (error) {
+            console.error('❌ ERROR rendering table:', error);
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger">Error loading entries. Check console for details.</td></tr>';
+        }
     }
 
     function renderEntriesPagination() {
@@ -509,15 +514,8 @@ window.UnifiedPage = (function() {
         const entry = currentData.entries.find(e => e.ticketNumber === ticketNumber);
         if (!entry) return;
         
-        // Find validation by matching entry properties
-        let validation = null;
-        if (currentData.validationResults && currentData.validationResults.results) {
-            validation = currentData.validationResults.results.find(v => 
-                v.ticket?.gameId === entry.gameId && 
-                v.ticket?.ticketNumber === entry.ticketNumber &&
-                v.ticket?.timestamp === entry.timestamp
-            );
-        }
+        // Get validation from map
+        const validation = validationMap.get(ticketNumber);
         
         const modalContent = document.getElementById('ticketModalContent');
         if (!modalContent) return;
