@@ -298,14 +298,20 @@ window.UnifiedPage = (function() {
             }
         }
         
-        // Build validation map
+        // Build validation map (NOTE: This map may have issues with duplicate ticket numbers)
+        // The table rendering now uses direct validation result matching instead
         validationMap.clear();
         if (validationResults) {
+            let validCount = 0;
+            let invalidCount = 0;
             validationResults.results.forEach(v => {
                 if (v.ticket?.ticketNumber) {
                     validationMap.set(v.ticket.ticketNumber, v);
                 }
+                if (v.status === 'VALID') validCount++;
+                if (v.status === 'INVALID') invalidCount++;
             });
+            console.log(`Validation map built: ${validationMap.size} unique ticket numbers (${validCount} valid, ${invalidCount} invalid)`);
         }
         
         // Populate filter options
@@ -360,49 +366,33 @@ window.UnifiedPage = (function() {
         }
         
         tbody.innerHTML = pageEntries.map((entry, index) => {
-            const validation = validationMap.get(entry.ticketNumber);
+            // Find validation result by matching entry properties (more reliable than ticketNumber alone)
+            let validation = null;
+            if (validationResults && validationResults.results) {
+                validation = validationResults.results.find(v => 
+                    v.ticket?.gameId === entry.gameId && 
+                    v.ticket?.ticketNumber === entry.ticketNumber &&
+                    v.ticket?.timestamp === entry.timestamp
+                );
+            }
+            
             const status = validation?.status || 'UNKNOWN';
             const isCutoff = validation?.isCutoff || false;
             
             // Debug first entry
             if (index === 0) {
-                console.log('===== FIRST ENTRY RENDERING DEBUG =====');
-                console.log('Entry:', {
-                    ticketNumber: entry.ticketNumber,
-                    gameId: entry.gameId,
-                    drawDate: entry.drawDate,
-                    parsedDate: entry.parsedDate
-                });
-                console.log('Validation:', {
-                    exists: !!validation,
-                    status: status,
-                    reason: validation?.reason,
-                    isCutoff: isCutoff,
-                    hasMatchedRecharge: !!validation?.matchedRecharge
-                });
+                console.log('===== FIRST ENTRY RENDERING =====');
+                console.log('Entry gameId:', entry.gameId, 'ticket:', entry.ticketNumber);
+                console.log('Validation found:', !!validation);
+                console.log('Validation status:', status);
+                console.log('Has matchedRecharge:', !!validation?.matchedRecharge);
                 if (validation?.matchedRecharge) {
-                    console.log('Matched Recharge:', {
-                        gameId: validation.matchedRecharge.gameId,
-                        rechargeId: validation.matchedRecharge.rechargeId?.substring(0, 30),
-                        amount: validation.matchedRecharge.amount,
-                        rechargeTime: validation.matchedRecharge.rechargeTime,
-                        isValidDate: validation.matchedRecharge.rechargeTime instanceof Date && !isNaN(validation.matchedRecharge.rechargeTime.getTime())
-                    });
-                } else {
-                    console.log('NO MATCHED RECHARGE - checking why...');
-                    // Check if there are recharges for this game ID
-                    const gameRecharges = currentData.allRecharges.filter(r => r.gameId === entry.gameId);
-                    console.log(`Found ${gameRecharges.length} recharges for gameId ${entry.gameId}`);
-                    if (gameRecharges.length > 0) {
-                        console.log('First recharge for this gameId:', {
-                            gameId: gameRecharges[0].gameId,
-                            amount: gameRecharges[0].amount,
-                            rechargeTime: gameRecharges[0].rechargeTime,
-                            isValidDate: gameRecharges[0].rechargeTime instanceof Date && !isNaN(gameRecharges[0].rechargeTime.getTime())
-                        });
-                    }
+                    console.log('✅ MATCHED RECHARGE DATA:');
+                    console.log('  Order Number:', validation.matchedRecharge.rechargeId);
+                    console.log('  Amount:', validation.matchedRecharge.amount);
+                    console.log('  Time:', validation.matchedRecharge.rechargeTime);
                 }
-                console.log('========================================');
+                console.log('==================================');
             }
             
             // Status badge with cutoff indicator
@@ -429,37 +419,36 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // Enhanced recharge info display (admin-compatible)
+            // RECHARGE INFO DISPLAY - Direct from validation matchedRecharge
             let rechargeInfo = '';
             
-            // Try multiple ways to get recharge data (admin uses boundRecharge)
-            const rechargeData = validation?.matchedRecharge || entry.boundRecharge || null;
-            
-            if (rechargeData) {
-                const rechargeId = rechargeData.rechargeId || rechargeData.boundRechargeId || '';
-                const shortId = rechargeId.length > 16 ? rechargeId.substring(0, 16) + '...' : rechargeId;
+            if (validation?.matchedRecharge) {
+                const r = validation.matchedRecharge;
                 
-                // Get time - try multiple formats
+                // ORDER NUMBER (rechargeId)
+                const orderNumber = r.rechargeId || '';
+                const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
+                
+                // CHARGE AMOUNT
+                const chargeAmount = r.amount || 0;
+                const amountDisplay = chargeAmount > 0 ? `R$ ${chargeAmount.toFixed(2)}` : 'R$ 0.00';
+                
+                // TIME (rechargeTime)
                 let timeDisplay = '-';
-                if (rechargeData.rechargeTime) {
-                    if (rechargeData.rechargeTime instanceof Date) {
-                        timeDisplay = AdminCore.formatBrazilDateTime(rechargeData.rechargeTime, { 
-                            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
-                        });
-                    } else if (typeof rechargeData.rechargeTime === 'string') {
-                        timeDisplay = rechargeData.rechargeTime;
-                    }
-                } else if (rechargeData.boundRechargeTime) {
-                    timeDisplay = rechargeData.boundRechargeTime;
+                if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                    timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+                } else if (r.rechargeTimeRaw) {
+                    timeDisplay = r.rechargeTimeRaw;
                 }
-                
-                // Get amount - try multiple formats
-                const amount = rechargeData.amount || rechargeData.boundRechargeAmount || 0;
-                const amountDisplay = amount > 0 ? `R$ ${amount.toFixed(2)}` : '-';
                 
                 rechargeInfo = `
                     <div class="recharge-details">
-                        <div class="recharge-id" title="${rechargeId}">${shortId}</div>
+                        <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
                         <div class="recharge-time">${timeDisplay}</div>
                         <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
                     </div>
@@ -520,7 +509,16 @@ window.UnifiedPage = (function() {
         const entry = currentData.entries.find(e => e.ticketNumber === ticketNumber);
         if (!entry) return;
         
-        const validation = validationMap.get(ticketNumber);
+        // Find validation by matching entry properties
+        let validation = null;
+        if (currentData.validationResults && currentData.validationResults.results) {
+            validation = currentData.validationResults.results.find(v => 
+                v.ticket?.gameId === entry.gameId && 
+                v.ticket?.ticketNumber === entry.ticketNumber &&
+                v.ticket?.timestamp === entry.timestamp
+            );
+        }
+        
         const modalContent = document.getElementById('ticketModalContent');
         if (!modalContent) return;
         
@@ -545,52 +543,51 @@ window.UnifiedPage = (function() {
             return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
         }).join('');
         
-        // Enhanced recharge information section (admin-compatible)
+        // RECHARGE INFORMATION - Direct from validation matchedRecharge
         let rechargeHtml = '<p class="text-muted">No linked recharge found</p>';
         
-        // Try multiple ways to get recharge data
-        const rechargeData = validation?.matchedRecharge || entry.boundRecharge || null;
-        
-        if (rechargeData) {
-            // Get time - try multiple formats
+        if (validation?.matchedRecharge) {
+            const r = validation.matchedRecharge;
+            
+            // ORDER NUMBER
+            const orderNumber = r.rechargeId || '-';
+            
+            // CHARGE AMOUNT
+            const chargeAmount = r.amount || 0;
+            const amountDisplay = chargeAmount > 0 ? `R$ ${chargeAmount.toFixed(2)}` : 'R$ 0.00';
+            
+            // TIME
             let timeDisplay = '-';
-            if (rechargeData.rechargeTime) {
-                if (rechargeData.rechargeTime instanceof Date) {
-                    timeDisplay = AdminCore.formatBrazilDateTime(rechargeData.rechargeTime, { 
-                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' 
-                    });
-                } else if (typeof rechargeData.rechargeTime === 'string') {
-                    timeDisplay = rechargeData.rechargeTime;
-                }
-            } else if (rechargeData.boundRechargeTime) {
-                timeDisplay = rechargeData.boundRechargeTime;
+            if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric', 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit' 
+                });
+            } else if (r.rechargeTimeRaw) {
+                timeDisplay = r.rechargeTimeRaw;
             }
-            
-            // Get amount
-            const amount = rechargeData.amount || rechargeData.boundRechargeAmount || 0;
-            const amountDisplay = amount > 0 ? `R$ ${amount.toFixed(2)}` : '?';
-            
-            // Get IDs
-            const rechargeId = rechargeData.rechargeId || rechargeData.boundRechargeId || '-';
-            const gameId = rechargeData.gameId || entry.gameId || '-';
             
             rechargeHtml = `
                 <div class="ticket-info-grid">
                     <div class="ticket-info-item">
-                        <span class="label">💰 Amount</span>
+                        <span class="label">💰 Charge Amount</span>
                         <span class="value text-success"><strong>${amountDisplay}</strong></span>
                     </div>
                     <div class="ticket-info-item">
-                        <span class="label">🔑 Recharge ID</span>
-                        <span class="value" style="font-size:0.7rem;word-break:break-all">${rechargeId}</span>
+                        <span class="label">📋 Order Number</span>
+                        <span class="value" style="font-size:0.7rem;word-break:break-all">${orderNumber}</span>
                     </div>
                     <div class="ticket-info-item">
                         <span class="label">⏰ Recharge Time</span>
                         <span class="value">${timeDisplay}</span>
                     </div>
                     <div class="ticket-info-item">
-                        <span class="label">🎮 Game ID (Recharge)</span>
-                        <span class="value">${gameId}</span>
+                        <span class="label">🎮 Game ID</span>
+                        <span class="value">${r.gameId || entry.gameId || '-'}</span>
                     </div>
                 </div>
             `;
