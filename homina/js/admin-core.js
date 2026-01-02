@@ -771,6 +771,9 @@ window.AdminCore = (function() {
     // UI Utilities
     // ============================================
     
+    // Track if navigation has been initialized
+    let navigationInitialized = false;
+
     /**
      * Show the main app container and hide login
      */
@@ -787,6 +790,19 @@ window.AdminCore = (function() {
         if (userNameEl && session) {
             userNameEl.textContent = session.username;
         }
+
+        // Initialize navigation and platform switcher when app is shown
+        // This ensures they're initialized both on refresh (when already logged in)
+        // and on fresh login
+        if (!navigationInitialized) {
+            // Small delay to ensure DOM is fully rendered
+            setTimeout(() => {
+                initScrollNav();
+                initPlatformSwitcher();
+                navigationInitialized = true;
+                console.log('Navigation and platform switcher initialized via showApp()');
+            }, 50);
+        }
     }
 
     /**
@@ -798,6 +814,9 @@ window.AdminCore = (function() {
         
         if (loginModal) loginModal.style.display = 'flex';
         if (appContainer) appContainer.style.display = 'none';
+        
+        // Reset navigation flag so it reinitializes on next login
+        navigationInitialized = false;
     }
 
     /**
@@ -890,9 +909,7 @@ window.AdminCore = (function() {
 
         // Check authentication
         if (isAuthenticated()) {
-            showApp();
-            initScrollNav();
-            initPlatformSwitcher();
+            showApp(); // This now initializes scroll nav and platform switcher
             startAutoRefresh();
             updateLastRefreshDisplay();
         } else {
