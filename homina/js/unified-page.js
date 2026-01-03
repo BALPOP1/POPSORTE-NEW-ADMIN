@@ -93,14 +93,27 @@ window.UnifiedPage = (function() {
         const isOnDay1 = ticketDateStr === day1DateStr;
         const isOnDay2 = ticketDateStr === day2DateStr;
         
+        // Check if ticket is on a no-draw day (Sunday/holiday)
+        const ticketIsNoDrawDay = isNoDrawDay(ticketTime);
+        
         if (isOnDay1) {
             // Day 1: Check if ticket was created AFTER 8 PM (use Brazilian timezone)
             const ticketHourStr = AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'});
             const ticketHour = parseInt(ticketHourStr, 10);
-            return ticketHour >= 20; // After 8 PM on Day 1 → CUTOFF
+            return ticketHour >= 20; // After 8 PM on Day 1 → CUTOFF (participates Day 2)
         } else if (isOnDay2) {
             // Day 2: ANY ticket created on Day 2 gets CUTOFF badge
-            return true; // On Day 2 → CUTOFF
+            return true; // On Day 2 → CUTOFF (participates Day 2)
+        } else if (ticketIsNoDrawDay) {
+            // Ticket created on no-draw day (Sunday/holiday) between Day 1 and Day 2
+            // Check if ticket is within eligibility window
+            const ticketTimeMs = ticketTime.getTime();
+            const windowStartMs = window.startDate.getTime();
+            const windowEndMs = window.endDate.getTime();
+            
+            if (ticketTimeMs >= windowStartMs && ticketTimeMs <= windowEndMs) {
+                return true; // On no-draw day within window → CUTOFF (participates Day 2)
+            }
         }
         
         return false;
@@ -503,14 +516,67 @@ window.UnifiedPage = (function() {
     let lastMatchedDataSize = 0; // Track if data changed
     
     /**
+     * Check if a date is a no-draw day (Sunday, December 25, January 1)
+     * @param {Date} date - Date to check
+     * @returns {boolean} True if no draw day
+     */
+    function isNoDrawDay(date) {
+        if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+            return false;
+        }
+        
+        // Get date components in Brazilian timezone
+        const dateStr = AdminCore.formatBrazilDateTime(date, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            weekday: 'long'
+        });
+        
+        // Check if Sunday (weekday will be "domingo" in pt-BR)
+        const weekday = AdminCore.formatBrazilDateTime(date, {weekday: 'long'}).toLowerCase();
+        if (weekday.includes('domingo') || weekday.includes('sunday')) {
+            return true;
+        }
+        
+        // Check if December 25 or January 1
+        const monthDay = AdminCore.formatBrazilDateTime(date, {
+            month: '2-digit',
+            day: '2-digit'
+        });
+        if (monthDay === '25/12' || monthDay === '01/01') {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Find next valid draw day (skip Sundays and holidays)
+     * @param {Date} startDate - Starting date
+     * @returns {Date} Next valid draw day
+     */
+    function getNextValidDrawDay(startDate) {
+        let current = new Date(startDate);
+        current.setDate(current.getDate() + 1);
+        
+        // Skip no-draw days
+        while (isNoDrawDay(current)) {
+            current.setDate(current.getDate() + 1);
+        }
+        
+        return current;
+    }
+    
+    /**
      * Calculate eligibility window for a recharge
-     * Returns { startDate, endDate } in Brazilian time
+     * Returns { startDate, endDate, day1, day2 } in Brazilian time
      * 
      * IMPORTANT: Uses "Record Time" from RECHARGE POPN1 - Sheet1 (7).csv (Column 5)
      * 
      * Rules:
-     * - If recharge BEFORE 8 PM: Day 1 = same day, Day 2 = next day
-     * - If recharge AFTER 8 PM: Day 1 = next day, Day 2 = day after next
+     * - Day 1 = recharge day (same day), Day 2 = next day (tomorrow)
+     * - If Day 1 or Day 2 is a no-draw day (Sunday/holiday), skip to next valid draw day
      * - Eligibility ends at 8 PM (20:00) on Day 2
      * - NO tickets on Day 3+ can use this recharge!
      */
@@ -519,11 +585,7 @@ window.UnifiedPage = (function() {
             return null;
         }
         
-        // Get recharge hour in Brazilian timezone (CRITICAL for correct cutoff calculation)
-        const rechargeHourStr = AdminCore.formatBrazilDateTime(rechargeTime, {hour: '2-digit'});
-        const rechargeHour = parseInt(rechargeHourStr, 10);
-        
-        // Get recharge date string in Brazilian timezone for Day 1/Day 2 calculation
+        // Get recharge date string in Brazilian timezone
         const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
             year: 'numeric',
             month: '2-digit',
@@ -533,23 +595,28 @@ window.UnifiedPage = (function() {
         // Parse recharge date components (DD/MM/YYYY)
         const [rechargeDay, rechargeMonth, rechargeYear] = rechargeDateStr.split('/').map(Number);
         
-        // Create Day 1 and Day 2 dates using the same method as AdminCore.parseBrazilDateTime
-        // (which creates dates representing Brazilian time but stored as UTC)
-        let day1, day2;
+        // Day 1 = recharge day (same day) - this is the FIRST eligible draw day
+        let day1 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay, 3, 0, 0, 0)); // Midnight BRT
         
-        if (rechargeHour < 20) {
-            // Recharge BEFORE 8 PM: Day 1 = same day, Day 2 = next day
-            day1 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay, 3, 0, 0, 0)); // Midnight BRT
-            day2 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + 1, 3, 0, 0, 0)); // Next day midnight BRT
-        } else {
-            // Recharge AFTER 8 PM: Day 1 = next day, Day 2 = day after next
-            day1 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + 1, 3, 0, 0, 0)); // Next day midnight BRT
-            day2 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + 2, 3, 0, 0, 0)); // Day after next midnight BRT
+        // If Day 1 is a no-draw day, skip to next valid draw day
+        if (isNoDrawDay(day1)) {
+            day1 = getNextValidDrawDay(day1);
         }
+        
+        // Day 2 = next valid draw day after Day 1
+        // Tickets can be created on days between Day 1 and Day 2 (including no-draw days)
+        // but they participate in Day 2 draw
+        day2 = getNextValidDrawDay(day1);
         
         // Eligibility ends at 8 PM (20:00) on Day 2 in Brazilian timezone
         // 8 PM BRT = 20:00 BRT = 23:00 UTC (BRT is UTC-3)
-        const eligibilityEnd = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + (rechargeHour < 20 ? 2 : 3), 23, 0, 0, 0));
+        const day2DateStr = AdminCore.formatBrazilDateTime(day2, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const [day2Day, day2Month, day2Year] = day2DateStr.split('/').map(Number);
+        const eligibilityEnd = new Date(Date.UTC(day2Year, day2Month - 1, day2Day, 23, 0, 0, 0)); // 8 PM BRT = 23:00 UTC
         
         return {
             startDate: rechargeTime, // Starts from recharge time
@@ -1141,8 +1208,11 @@ window.UnifiedPage = (function() {
                     const isOnDay1 = ticketDateStr === day1DateStr;
                     const isOnDay2 = ticketDateStr === day2DateStr;
                     
+                    // Check if ticket is on a no-draw day (Sunday/holiday)
+                    const ticketIsNoDrawDay = isNoDrawDay(ticketTime);
+                    
                     // DEBUG: Log cutoff calculation for troubleshooting
-                    const DEBUG_CUTOFF = true; // Set to true to enable
+                    const DEBUG_CUTOFF = false; // Set to true to enable
                     if (DEBUG_CUTOFF && (entry.gameId === '3105451998' || entry.gameId === '3437192929' || entry.gameId === '3384889775')) {
                         const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
                             year: 'numeric',
@@ -1160,7 +1230,7 @@ window.UnifiedPage = (function() {
                         });
                         console.log(`🔍 CUTOFF DEBUG GameID=${entry.gameId}:`);
                         console.log(`   Recharge: ${rechargeDateStr} (Day1=${day1DateStr}, Day2=${day2DateStr})`);
-                        console.log(`   Ticket: ${ticketTimeStr} (Date=${ticketDateStr})`);
+                        console.log(`   Ticket: ${ticketTimeStr} (Date=${ticketDateStr}, NoDrawDay=${ticketIsNoDrawDay})`);
                         console.log(`   isOnDay1=${isOnDay1}, isOnDay2=${isOnDay2}`);
                         if (isOnDay1) {
                             const ticketHourStr = AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'});
@@ -1175,11 +1245,21 @@ window.UnifiedPage = (function() {
                         const ticketHour = parseInt(ticketHourStr, 10);
                         
                         if (ticketHour >= 20) {
-                            isCutoff = true; // After 8 PM on Day 1 → CUTOFF
+                            isCutoff = true; // After 8 PM on Day 1 → CUTOFF (participates Day 2)
                         }
                     } else if (isOnDay2) {
                         // Day 2: ANY ticket created on Day 2 gets CUTOFF badge
-                        isCutoff = true; // On Day 2 → CUTOFF
+                        isCutoff = true; // On Day 2 → CUTOFF (participates Day 2)
+                    } else if (ticketIsNoDrawDay) {
+                        // Ticket created on no-draw day (Sunday/holiday) between Day 1 and Day 2
+                        // Check if ticket is within eligibility window
+                        const ticketTimeMs = ticketTime.getTime();
+                        const windowStartMs = window.startDate.getTime();
+                        const windowEndMs = window.endDate.getTime();
+                        
+                        if (ticketTimeMs >= windowStartMs && ticketTimeMs <= windowEndMs) {
+                            isCutoff = true; // On no-draw day within window → CUTOFF (participates Day 2)
+                        }
                     }
                 }
             }
