@@ -347,7 +347,7 @@ window.RechargeValidator = (function() {
 
         /**
          * Validate all entries against recharge data
-         * @param {Array} entries - Array of entry objects with registrationDateTime and gameId
+         * @param {Array} entries - Array of entry objects with parsedDate/timestamp and gameId
          * @returns {Array} Array of validated entries with validity, invalidReasonCode, boundRecharge data, cutoffFlag
          */
         validateEntries(entries) {
@@ -379,7 +379,19 @@ window.RechargeValidator = (function() {
             const entriesByGameId = {};
             entries.forEach(e => {
                 if (!entriesByGameId[e.gameId]) entriesByGameId[e.gameId] = [];
-                e.ticketTimeObj = this.parseTicketTime(e.registrationDateTime);
+                
+                // Use parsedDate if it exists (already a Date object), otherwise parse timestamp
+                if (e.parsedDate && e.parsedDate instanceof Date && !isNaN(e.parsedDate.getTime())) {
+                    e.ticketTimeObj = e.parsedDate;
+                } else if (e.timestamp) {
+                    e.ticketTimeObj = this.parseTicketTime(e.timestamp);
+                } else if (e.registrationDateTime) {
+                    // Fallback for admin format
+                    e.ticketTimeObj = this.parseTicketTime(e.registrationDateTime);
+                } else {
+                    e.ticketTimeObj = null;
+                }
+                
                 entriesByGameId[e.gameId].push(e);
             });
             Object.values(entriesByGameId).forEach(list =>
