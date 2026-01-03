@@ -177,8 +177,17 @@ window.DataFetcher = (function() {
      * @returns {Object} Parsed entry object
      */
     function parseEntryRow(row) {
-        // Expected columns: Timestamp, Platform, Game ID, WhatsApp, Numbers, Draw Date, Contest, Ticket #, Status
-        const timestamp = row[0] || '';
+        // CSV Source: OLD POP SORTE - SORTE (8).csv
+        // Column 0: DATA/HORA REGISTRO (Entry creation timestamp) - DD/MM/YYYY HH:MM:SS
+        // Column 1: PLATFORM
+        // Column 2: GAME ID (matches Member ID from recharge CSV)
+        // Column 3: WHATSAPP
+        // Column 4: NÚMEROS ESCOLHIDOS
+        // Column 5: DATA SORTEIO
+        // Column 6: CONCURSO
+        // Column 7: BILHETE #
+        // Column 8: STATUS
+        const timestamp = row[0] || ''; // DATA/HORA REGISTRO
         const parsedDate = AdminCore.parseBrazilDateTime(timestamp);
         
         // Parse chosen numbers
@@ -303,11 +312,12 @@ window.DataFetcher = (function() {
             return null;
         }
         
+        // CSV Source: RECHARGE POPN1 - Sheet1 (7).csv
         // CSV Structure: Member ID,Order Number,Region,Currency Type,Merchant,Record Time,Account Change Type,Account Change Category II,Change Amount,...
-        // Column 0: Member ID (gameId) - 10 digits
+        // Column 0: Member ID (gameId) - 10 digits (matches GAME ID from entries CSV)
         // Column 1: Order Number (rechargeId)
-        // Column 5: Record Time (timestamp) - DD/MM/YYYY HH:MM:SS
-        // Column 8: Change Amount
+        // Column 5: Record Time (recharge timestamp) - DD/MM/YYYY HH:MM:SS
+        // Column 8: Change Amount (recharge amount)
         
         const gameId = row[0] ? row[0].trim() : '';
         const rechargeId = row[1] ? row[1].trim() : '';
@@ -319,30 +329,43 @@ window.DataFetcher = (function() {
             return null;
         }
         
-        // Parse timestamp from column 5: DD/MM/YYYY HH:MM:SS
+        // Parse timestamp from column 5: DD/MM/YYYY HH:MM:SS or D/M/YYYY HH:MM
+        // Use AdminCore.parseBrazilDateTime which handles timezone correctly
         let rechargeTime = null;
         if (timestampStr) {
-            // Try DD/MM/YYYY HH:MM:SS format
-            const dmyMatch = timestampStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
-            if (dmyMatch) {
-                // Parse date components
-                const day = parseInt(dmyMatch[1], 10);
-                const month = parseInt(dmyMatch[2], 10) - 1; // Month is 0-indexed
-                const year = parseInt(dmyMatch[3], 10);
-                const hour = parseInt(dmyMatch[4], 10);
-                const minute = parseInt(dmyMatch[5], 10);
-                const second = parseInt(dmyMatch[6], 10);
-                
-                // Create date string in ISO format (treating as local time, will be converted correctly)
-                // Format: YYYY-MM-DDTHH:MM:SS
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
-                rechargeTime = new Date(dateStr);
-            } else {
-                // Try ISO format as fallback
-                const isoMatch = timestampStr.match(/(\d{4}[-\/]\d{2}[-\/]\d{2}[\sT]\d{2}:\d{2}:\d{2})/);
-                if (isoMatch) {
-                    rechargeTime = new Date(isoMatch[1].replace(/\//g, '-').replace(' ', 'T'));
+            // Normalize the format: ensure 2-digit day/month and add seconds if missing
+            let normalizedTime = timestampStr.trim();
+            
+            // Handle single-digit day/month: "3/1/2026 13:58" -> "03/01/2026 13:58:00"
+            // Also handle cases with or without seconds
+            normalizedTime = normalizedTime.replace(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\b/g, (match, d, m, y, h, mm, s) => {
+                const day = String(d).padStart(2, '0');
+                const month = String(m).padStart(2, '0');
+                const hour = String(h).padStart(2, '0');
+                const second = s || '00';
+                return `${day}/${month}/${y} ${hour}:${mm}:${second}`;
+            });
+            
+            // DEBUG: Log original and normalized for troubleshooting
+            if (timestampStr !== normalizedTime) {
+                console.log(`🔄 Normalized recharge time: "${timestampStr}" → "${normalizedTime}"`);
+            }
+            
+            // Use AdminCore.parseBrazilDateTime for proper timezone handling
+            // This function handles DD/MM/YYYY HH:MM:SS format correctly
+            rechargeTime = AdminCore.parseBrazilDateTime(normalizedTime);
+            
+            // DEBUG: Log parsing result
+            if (rechargeTime) {
+                const debugStr = AdminCore.formatBrazilDateTime(rechargeTime, {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+                if (timestampStr.includes('13:58') || timestampStr.includes('02:58')) {
+                    console.log(`🕐 Parsed recharge: "${timestampStr}" → "${normalizedTime}" → Display: "${debugStr}"`);
                 }
+            } else {
+                console.warn(`⚠️ Failed to parse recharge time: "${timestampStr}"`);
             }
         }
         
