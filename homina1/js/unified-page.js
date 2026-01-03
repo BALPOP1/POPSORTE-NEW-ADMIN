@@ -513,17 +513,34 @@ window.UnifiedPage = (function() {
                 continue;
             }
             
-            // Find all recharges for this game ID
-            const userRecharges = currentData.allRecharges.filter(r => 
-                r.gameId === entry.gameId && 
+            // Find all recharges for THIS EXACT GAME ID ONLY
+            const allGameIdRecharges = currentData.allRecharges.filter(r => r.gameId === entry.gameId);
+            
+            const userRecharges = allGameIdRecharges.filter(r => 
                 r.rechargeTime instanceof Date &&
                 !isNaN(r.rechargeTime.getTime()) &&
                 r.rechargeId && 
                 !boundOrderNumbers.has(r.rechargeId) // NOT already bound
             );
             
+            // DEBUG: Show filtering effect
+            if (matchCount < 3) {
+                console.log(`🔎 GameID=${entry.gameId}: Total recharges=${allGameIdRecharges.length}, Available (not bound)=${userRecharges.length}, Already bound=${allGameIdRecharges.length - userRecharges.length}`);
+            }
+            
             if (userRecharges.length === 0) {
+                if (matchCount < 3) {
+                    console.log(`⚠️ No available recharges for GameID=${entry.gameId}, Ticket=${entry.ticketNumber} (all ${allGameIdRecharges.length} recharges already bound)`);
+                }
                 continue;
+            }
+            
+            // DEBUG: Show available recharges for first few entries
+            if (matchCount < 3) {
+                console.log(`🔎 Entry GameID=${entry.gameId}, Available recharges: ${userRecharges.length}, Bound so far: ${boundOrderNumbers.size}`);
+                if (userRecharges.length > 0) {
+                    console.log(`   First available recharge: ${userRecharges[0].rechargeId.substring(0, 20)}... (R$${userRecharges[0].amount})`);
+                }
             }
             
             // Find CLOSEST recharge by time (must be BEFORE ticket)
@@ -549,18 +566,31 @@ window.UnifiedPage = (function() {
             
             // BIND IT!
             if (closestRecharge) {
-                boundOrderNumbers.add(closestRecharge.rechargeId);
+                const orderToAdd = closestRecharge.rechargeId;
+                
+                // DEBUG: Verify it's not already bound
+                if (boundOrderNumbers.has(orderToAdd)) {
+                    console.error(`🚨 BUG! Trying to bind already-bound order: ${orderToAdd.substring(0, 20)}...`);
+                }
+                
+                boundOrderNumbers.add(orderToAdd);
+                
+                // DEBUG: Verify it was added
+                if (!boundOrderNumbers.has(orderToAdd)) {
+                    console.error(`🚨 BUG! Failed to add order to boundOrderNumbers: ${orderToAdd.substring(0, 20)}...`);
+                }
+                
                 entryRechargeMap.set(entry.ticketNumber, {
-                    orderNumber: closestRecharge.rechargeId,
+                    orderNumber: orderToAdd,
                     recordTime: closestRecharge.rechargeTime,
                     amount: closestRecharge.amount,
                     gameId: closestRecharge.gameId // Store for verification
                 });
                 matchCount++;
                 
-                // DEBUG first 5 matches - SHOW GAME ID MATCH
-                if (matchCount <= 5) {
-                    console.log(`✅ Match ${matchCount}: GameID=${entry.gameId} | Ticket=${entry.ticketNumber} → Order=${closestRecharge.rechargeId.substring(0, 15)}... (R$${closestRecharge.amount})`);
+                // DEBUG first 10 matches - SHOW GAME ID MATCH
+                if (matchCount <= 10) {
+                    console.log(`✅ Match ${matchCount}: GameID=${entry.gameId} | Ticket=${entry.ticketNumber} → Order=${orderToAdd.substring(0, 15)}... (R$${closestRecharge.amount}) | BoundSize=${boundOrderNumbers.size}`);
                 }
             }
         }
@@ -568,6 +598,18 @@ window.UnifiedPage = (function() {
         console.log(`✅ BRUTE FORCE MATCHED: ${matchCount} tickets bound to recharges`);
         console.log(`📊 Bound order numbers: ${boundOrderNumbers.size}`);
         console.log(`📋 Entry-Recharge map size: ${entryRechargeMap.size}`);
+        
+        // DETAILED DEBUG: Show first 10 unique order numbers
+        const orderArray = Array.from(boundOrderNumbers).slice(0, 10);
+        console.log(`🔍 First 10 bound orders:`, orderArray.map(o => o.substring(0, 20) + '...'));
+        
+        // DETAILED DEBUG: Show first 10 entry mappings
+        const mappingArray = Array.from(entryRechargeMap.entries()).slice(0, 10);
+        console.log(`🔍 First 10 entry mappings:`, mappingArray.map(([ticket, data]) => ({
+            ticket: ticket,
+            order: data.orderNumber.substring(0, 20) + '...',
+            gameId: data.gameId
+        })));
     }
 
     function renderEntriesTable() {
@@ -636,7 +678,12 @@ window.UnifiedPage = (function() {
             
             // DEBUG first few entries
             if (index < 5) {
-                console.log(`Entry ${index}: Ticket=${entry.ticketNumber}, Status=${entryCsvStatus}, HasMatch=${!!bruteForceMatch}, IsValid=${isValidEntry}`);
+                console.log(`Entry ${index}: GameID=${entry.gameId}, Ticket=${entry.ticketNumber}, Status=${entryCsvStatus}, HasMatch=${!!bruteForceMatch}, MatchGameID=${bruteForceMatch?.gameId}, IsValid=${isValidEntry}`);
+            }
+            
+            // SAFETY CHECK: Verify Game IDs match (should always be true)
+            if (bruteForceMatch && bruteForceMatch.gameId !== entry.gameId) {
+                console.error(`❌ GAME ID MISMATCH! Entry=${entry.gameId}, Recharge=${bruteForceMatch.gameId}`);
             }
             
             if (isValidEntry && bruteForceMatch) {
