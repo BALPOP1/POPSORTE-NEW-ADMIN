@@ -513,66 +513,31 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // RECHARGE INFO - DIRECT MATCH BY GAME ID
-            let rechargeInfo = '<span class="text-muted" style="font-size:0.85rem">No recharge found</span>';
+            // RECHARGE INFO - Only show for VALID tickets using validation data
+            let rechargeInfo = '-';
             
-            try {
-                // Find recharge directly by matching gameId
-                const entryGameId = entry.gameId;
+            // Get validation status for this entry
+            if (validationResult && validationResult.matchedRecharge) {
+                const r = validationResult.matchedRecharge;
+                const chargeAmount = r.amount || 0;
+                let amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
                 
-                if (entryGameId && currentData.allRecharges && currentData.allRecharges.length > 0) {
-                    // Find ALL recharges for this game ID
-                    const userRecharges = currentData.allRecharges.filter(r => r.gameId === entryGameId);
-                    
-                    if (userRecharges.length > 0) {
-                        // Get the most recent recharge (recharges are sorted by time descending)
-                        const r = userRecharges[0];
-                        
-                        // ORDER NUMBER from CSV (Column 1)
-                        const orderNumber = r.rechargeId || '';
-                        const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
-                        
-                        // CHARGE AMOUNT from CSV (Column 8)
-                        const chargeAmount = r.amount || 0;
-                        const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
-                        
-                        // TIME from CSV (Column 5)
-                        let timeDisplay = '-';
-                        if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
-                            timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
-                                day: '2-digit', 
-                                month: '2-digit', 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                            });
-                        } else if (r.rechargeTimeRaw) {
-                            timeDisplay = r.rechargeTimeRaw;
-                        }
-                        
-                        rechargeInfo = `
-                            <div class="recharge-details">
-                                <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
-                                <div class="recharge-time">${timeDisplay}</div>
-                                <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
-                            </div>
-                        `;
-                        
-                        // Debug first entry with recharge
-                        if (index === 0 && userRecharges.length > 0) {
-                            console.log('💰 RECHARGE FOUND FOR FIRST ENTRY:');
-                            console.log('   Game ID:', entryGameId);
-                            console.log('   Order#:', orderNumber);
-                            console.log('   Amount:', chargeAmount);
-                            console.log('   Time:', timeDisplay);
-                            console.log('   Total recharges for this user:', userRecharges.length);
-                        }
-                    } else if (index === 0) {
-                        console.log('❌ NO RECHARGE for gameId:', entryGameId);
-                    }
+                // Add Day 2 badge if using second eligibility window
+                if (validationResult.isDay2) {
+                    amountDisplay += ' <span class="badge badge-warning" style="font-size:0.6rem;">⚠️ DAY 2</span>';
                 }
-            } catch (error) {
-                console.error('❌ ERROR getting recharge info:', error);
-                rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">Error loading recharge</span>';
+                
+                rechargeInfo = `<div class="recharge-amount"><strong>${amountDisplay}</strong></div>`;
+                
+                // Debug first entry with recharge
+                if (index === 0) {
+                    console.log('💰 VALID RECHARGE for first entry:');
+                    console.log('   Game ID:', entry.gameId);
+                    console.log('   Amount:', chargeAmount);
+                    console.log('   Day 2:', validationResult.isDay2);
+                }
+            } else if (index === 0) {
+                console.log('❌ NO VALID RECHARGE for first entry');
             }
             
             // WhatsApp masked display
@@ -659,64 +624,69 @@ window.UnifiedPage = (function() {
             return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
         }).join('');
         
-        // RECHARGE INFORMATION - DIRECT MATCH BY GAME ID
-        let rechargeHtml = '<p class="text-muted">No recharge found for this Game ID</p>';
+        // RECHARGE INFORMATION - Only show for VALID tickets
+        let rechargeHtml = '<p class="text-muted">No linked recharge</p>';
         
-        // Find recharge directly by matching gameId
-        const entryGameId = entry.gameId;
-        if (entryGameId && currentData.allRecharges && currentData.allRecharges.length > 0) {
-            const userRecharges = currentData.allRecharges.filter(r => r.gameId === entryGameId);
+        // Only show recharge info for VALID tickets
+        if (statusText === 'VALID') {
+            // Get validation data if available
+            const validation = currentData.validationResults?.results?.find(v => v.ticket?.ticketNumber === ticketNumber);
             
-            if (userRecharges.length > 0) {
-                // Show ALL recharges for this user
-                rechargeHtml = '<div class="mb-3">';
+            if (validation && validation.matchedRecharge) {
+                const r = validation.matchedRecharge;
+                const orderNumber = r.rechargeId || '-';
+                const chargeAmount = r.amount || 0;
+                let amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
                 
-                userRecharges.slice(0, 5).forEach((r, idx) => {
-                    const orderNumber = r.rechargeId || '-';
-                    const chargeAmount = r.amount || 0;
-                    const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
-                    
-                    let timeDisplay = '-';
-                    if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
-                        timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
-                            day: '2-digit', 
-                            month: '2-digit', 
-                            year: 'numeric', 
-                            hour: '2-digit', 
-                            minute: '2-digit', 
-                            second: '2-digit' 
-                        });
-                    } else if (r.rechargeTimeRaw) {
-                        timeDisplay = r.rechargeTimeRaw;
-                    }
-                    
-                    rechargeHtml += `
-                        <div class="ticket-info-grid mb-3" style="border-bottom: 1px solid var(--border-primary); padding-bottom: 12px;">
-                            <div class="ticket-info-item">
-                                <span class="label">💰 Amount ${idx === 0 ? '(Latest)' : ''}</span>
-                                <span class="value text-success"><strong>${amountDisplay}</strong></span>
-                            </div>
-                            <div class="ticket-info-item">
-                                <span class="label">📋 Order Number</span>
-                                <span class="value" style="font-size:0.7rem;word-break:break-all">${orderNumber}</span>
-                            </div>
-                            <div class="ticket-info-item">
-                                <span class="label">⏰ Recharge Time</span>
-                                <span class="value">${timeDisplay}</span>
-                            </div>
-                            <div class="ticket-info-item">
-                                <span class="label">🎮 Game ID</span>
-                                <span class="value">${r.gameId}</span>
-                            </div>
+                // Add Day 2 warning if applicable
+                let day2Warning = '';
+                if (validation.isDay2) {
+                    day2Warning = `
+                        <div class="status-banner warning mb-3">
+                            <span class="status-banner-icon">⚠️</span>
+                            <span class="status-banner-text">
+                                <strong>Day 2 Eligibility</strong> - This ticket uses the 2nd eligible draw day from the recharge
+                            </span>
                         </div>
                     `;
-                });
-                
-                if (userRecharges.length > 5) {
-                    rechargeHtml += `<p class="text-muted text-center">... and ${userRecharges.length - 5} more recharges</p>`;
+                    amountDisplay += ' <span class="badge badge-warning">⚠️ DAY 2</span>';
                 }
                 
-                rechargeHtml += '</div>';
+                let timeDisplay = '-';
+                if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                    timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit' 
+                    });
+                } else if (r.rechargeTimeRaw) {
+                    timeDisplay = r.rechargeTimeRaw;
+                }
+                
+                rechargeHtml = `
+                    ${day2Warning}
+                    <div class="ticket-info-grid">
+                        <div class="ticket-info-item">
+                            <span class="label">💰 Amount</span>
+                            <span class="value text-success"><strong>${amountDisplay}</strong></span>
+                        </div>
+                        <div class="ticket-info-item">
+                            <span class="label">📋 Order Number</span>
+                            <span class="value" style="font-size:0.7rem;word-break:break-all">${orderNumber}</span>
+                        </div>
+                        <div class="ticket-info-item">
+                            <span class="label">⏰ Recharge Time</span>
+                            <span class="value">${timeDisplay}</span>
+                        </div>
+                        <div class="ticket-info-item">
+                            <span class="label">🎮 Game ID</span>
+                            <span class="value">${r.gameId}</span>
+                        </div>
+                    </div>
+                `;
             }
         }
         
