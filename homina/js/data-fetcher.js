@@ -177,8 +177,17 @@ window.DataFetcher = (function() {
      * @returns {Object} Parsed entry object
      */
     function parseEntryRow(row) {
-        // Expected columns: Timestamp, Platform, Game ID, WhatsApp, Numbers, Draw Date, Contest, Ticket #, Status
-        const timestamp = row[0] || '';
+        // CSV Source: OLD POP SORTE - SORTE (8).csv
+        // Column 0: DATA/HORA REGISTRO (Entry creation timestamp) - DD/MM/YYYY HH:MM:SS
+        // Column 1: PLATFORM
+        // Column 2: GAME ID (matches Member ID from recharge CSV)
+        // Column 3: WHATSAPP
+        // Column 4: NÚMEROS ESCOLHIDOS
+        // Column 5: DATA SORTEIO
+        // Column 6: CONCURSO
+        // Column 7: BILHETE #
+        // Column 8: STATUS
+        const timestamp = row[0] || ''; // DATA/HORA REGISTRO
         const parsedDate = AdminCore.parseBrazilDateTime(timestamp);
         
         // Parse chosen numbers
@@ -303,11 +312,12 @@ window.DataFetcher = (function() {
             return null;
         }
         
+        // CSV Source: RECHARGE POPN1 - Sheet1 (7).csv
         // CSV Structure: Member ID,Order Number,Region,Currency Type,Merchant,Record Time,Account Change Type,Account Change Category II,Change Amount,...
-        // Column 0: Member ID (gameId) - 10 digits
+        // Column 0: Member ID (gameId) - 10 digits (matches GAME ID from entries CSV)
         // Column 1: Order Number (rechargeId)
-        // Column 5: Record Time (timestamp) - DD/MM/YYYY HH:MM:SS
-        // Column 8: Change Amount
+        // Column 5: Record Time (recharge timestamp) - DD/MM/YYYY HH:MM:SS
+        // Column 8: Change Amount (recharge amount)
         
         const gameId = row[0] ? row[0].trim() : '';
         const rechargeId = row[1] ? row[1].trim() : '';
