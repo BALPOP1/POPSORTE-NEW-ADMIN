@@ -340,17 +340,6 @@
                                 <option value="invalid">Invalid</option>
                             </select>
                         </div>
-                        <div class="filter-group">
-                            <label>Sort By</label>
-                            <select id="sortBy">
-                                <option value="date-desc">Date (Newest First)</option>
-                                <option value="date-asc">Date (Oldest First)</option>
-                                <option value="cutoff-yes">Cutoff First</option>
-                                <option value="cutoff-no">No Cutoff First</option>
-                                <option value="status-valid">Valid First</option>
-                                <option value="status-invalid">Invalid First</option>
-                            </select>
-                        </div>
                         <div class="filter-actions">
                             <button id="btnClearFilters" class="btn btn-secondary btn-sm">Clear</button>
                             <button id="btnExportCSV" class="btn btn-primary btn-sm">📥 Export</button>
@@ -361,23 +350,20 @@
                     <div class="card">
                         <div class="table-container">
                             <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Status</th>
-                                    <th>Date/Time</th>
-                                    <th>Platform</th>
-                                    <th>Game ID</th>
-                                    <th>WhatsApp</th>
-                                    <th>Numbers</th>
-                                    <th>Draw Date</th>
-                                    <th>Contest</th>
-                                    <th>Ticket #</th>
-                                    <th>Recharge Info</th>
-                                </tr>
-                            </thead>
-                            <tbody id="entriesTableBody">
-                                <tr><td colspan="10" class="text-center text-muted">Loading entries...</td></tr>
-                            </tbody>
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Date/Time</th>
+                                        <th>Platform</th>
+                                        <th>Game ID</th>
+                                        <th>Numbers</th>
+                                        <th>Contest</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="entriesTableBody">
+                                    <tr><td colspan="7" class="text-center text-muted">Loading entries...</td></tr>
+                                </tbody>
                             </table>
                         </div>
                         <!-- Pagination -->

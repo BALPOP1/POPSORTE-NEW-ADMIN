@@ -177,17 +177,8 @@ window.DataFetcher = (function() {
      * @returns {Object} Parsed entry object
      */
     function parseEntryRow(row) {
-        // CSV Source: OLD POP SORTE - SORTE (8).csv
-        // Column 0: DATA/HORA REGISTRO (Entry creation timestamp) - DD/MM/YYYY HH:MM:SS
-        // Column 1: PLATFORM
-        // Column 2: GAME ID (matches Member ID from recharge CSV)
-        // Column 3: WHATSAPP
-        // Column 4: NÚMEROS ESCOLHIDOS
-        // Column 5: DATA SORTEIO
-        // Column 6: CONCURSO
-        // Column 7: BILHETE #
-        // Column 8: STATUS
-        const timestamp = row[0] || ''; // DATA/HORA REGISTRO
+        // Expected columns: Timestamp, Platform, Game ID, WhatsApp, Numbers, Draw Date, Contest, Ticket #, Status
+        const timestamp = row[0] || '';
         const parsedDate = AdminCore.parseBrazilDateTime(timestamp);
         
         // Parse chosen numbers
@@ -305,81 +296,73 @@ window.DataFetcher = (function() {
      * @returns {Object|null} Parsed recharge object or null if invalid
      */
     function parseRechargeRow(row) {
-        if (!row || row.length < 9) return null;
+        if (!row || row.length < 2) return null;
         
-        // Skip header row
-        if (row[0] && (row[0].toLowerCase().includes('member') || row[0].toLowerCase().includes('id'))) {
-            return null;
+        const fullRow = row.join(' ');
+        
+        // Try to extract Game ID (10 digits) from the row
+        let gameId = '';
+        
+        // First, check if first column is a 10-digit game ID
+        if (row[0] && /^\d{10}$/.test(row[0].trim())) {
+            gameId = row[0].trim();
+        } else {
+            // Try to find 10-digit ID anywhere in the row
+            const gameIdMatch = fullRow.match(/\b(\d{10})\b/);
+            gameId = gameIdMatch ? gameIdMatch[1] : '';
         }
         
-        // CSV Source: RECHARGE POPN1 - Sheet1 (7).csv
-        // CSV Structure: Member ID,Order Number,Region,Currency Type,Merchant,Record Time,Account Change Type,Account Change Category II,Change Amount,...
-        // Column 0: Member ID (gameId) - 10 digits (matches GAME ID from entries CSV)
-        // Column 1: Order Number (rechargeId)
-        // Column 5: Record Time (recharge timestamp) - DD/MM/YYYY HH:MM:SS
-        // Column 8: Change Amount (recharge amount)
+        // Skip if no valid game ID found
+        if (!gameId) return null;
         
-        const gameId = row[0] ? row[0].trim() : '';
-        const rechargeId = row[1] ? row[1].trim() : '';
-        const timestampStr = row[5] ? row[5].trim() : '';
-        const amountStr = row[8] ? row[8].trim() : '';
-        
-        // Validate game ID (must be 10 digits)
-        if (!gameId || !/^\d{10}$/.test(gameId)) {
+        // Skip header rows
+        if (gameId === '0000000000' || fullRow.toLowerCase().includes('game id')) {
             return null;
         }
-        
-        // Parse timestamp from column 5: DD/MM/YYYY HH:MM:SS
+
+        // Try to parse timestamp - look for various date patterns
         let rechargeTime = null;
-        if (timestampStr) {
-            // Try DD/MM/YYYY HH:MM:SS format
-            const dmyMatch = timestampStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
+        
+        // Check each column for a date
+        for (const col of row) {
+            if (!col) continue;
+            const colStr = col.trim();
+            
+            // ISO format: 2024-12-30T15:30:00 or 2024-12-30 15:30:00
+            const isoMatch = colStr.match(/(\d{4}[-\/]\d{2}[-\/]\d{2}[\sT]\d{2}:\d{2}:\d{2})/);
+            if (isoMatch) {
+                rechargeTime = new Date(isoMatch[1].replace(/\//g, '-').replace(' ', 'T'));
+                break;
+            }
+            
+            // DD/MM/YYYY HH:MM:SS format
+            const dmyMatch = colStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
             if (dmyMatch) {
-                // Parse date components
-                const day = parseInt(dmyMatch[1], 10);
-                const month = parseInt(dmyMatch[2], 10) - 1; // Month is 0-indexed
-                const year = parseInt(dmyMatch[3], 10);
-                const hour = parseInt(dmyMatch[4], 10);
-                const minute = parseInt(dmyMatch[5], 10);
-                const second = parseInt(dmyMatch[6], 10);
-                
-                // Create date string in ISO format (treating as local time, will be converted correctly)
-                // Format: YYYY-MM-DDTHH:MM:SS
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
-                rechargeTime = new Date(dateStr);
-            } else {
-                // Try ISO format as fallback
-                const isoMatch = timestampStr.match(/(\d{4}[-\/]\d{2}[-\/]\d{2}[\sT]\d{2}:\d{2}:\d{2})/);
-                if (isoMatch) {
-                    rechargeTime = new Date(isoMatch[1].replace(/\//g, '-').replace(' ', 'T'));
+                rechargeTime = new Date(`${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}T${dmyMatch[4]}:${dmyMatch[5]}:${dmyMatch[6]}`);
+                break;
+            }
+        }
+
+        // Try to extract amount - look for numeric values
+        let amount = 0;
+        for (const col of row) {
+            if (!col) continue;
+            const numMatch = col.trim().match(/^[\d,]+\.?\d*$/);
+            if (numMatch && parseFloat(numMatch[0].replace(/,/g, '')) > 0) {
+                const parsed = parseFloat(numMatch[0].replace(/,/g, ''));
+                // Skip if it looks like a game ID or timestamp
+                if (parsed < 100000 && parsed > 0) {
+                    amount = parsed;
+                    break;
                 }
             }
-        }
-        
-        // Validate date
-        if (rechargeTime && (isNaN(rechargeTime.getTime()) || !(rechargeTime instanceof Date))) {
-            rechargeTime = null;
-        }
-        
-        // Parse amount from column 8
-        let amount = 0;
-        if (amountStr) {
-            const parsed = parseFloat(amountStr.replace(/,/g, ''));
-            if (!isNaN(parsed) && parsed > 0) {
-                amount = parsed;
-            }
-        }
-        
-        // Skip if missing critical data
-        if (!rechargeId || !rechargeTime || amount === 0) {
-            return null;
         }
 
         return {
             gameId: gameId,
-            rechargeId: rechargeId,
+            rechargeId: row[1] || '',
             rechargeTime: rechargeTime,
-            rechargeTimeRaw: timestampStr,
+            rechargeTimeRaw: row[2] || '',
             amount: amount,
             status: 'RECHARGE',
             rawRow: row
@@ -439,24 +422,6 @@ window.DataFetcher = (function() {
             }
 
             console.log(`Recharges parsed: ${recharges.length} valid, ${skippedRows} skipped`);
-            
-            // HARDCORE DEBUG: Show first 3 recharges in detail
-            if (recharges.length > 0) {
-                console.log('===== RECHARGE DATA INSPECTION =====');
-                recharges.slice(0, 3).forEach((r, i) => {
-                    console.log(`Recharge ${i + 1}:`, {
-                        gameId: r.gameId,
-                        rechargeId: r.rechargeId?.substring(0, 20),
-                        amount: r.amount,
-                        hasRechargeTime: !!r.rechargeTime,
-                        rechargeTimeIsDate: r.rechargeTime instanceof Date,
-                        rechargeTimeValid: r.rechargeTime instanceof Date ? !isNaN(r.rechargeTime.getTime()) : false,
-                        rechargeTimeString: r.rechargeTime ? r.rechargeTime.toString() : 'MISSING',
-                        rawRow: r.rawRow?.join(' | ')
-                    });
-                });
-                console.log('====================================');
-            }
 
             // Sort by timestamp descending
             recharges.sort((a, b) => {
