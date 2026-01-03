@@ -508,6 +508,7 @@ window.UnifiedPage = (function() {
     
     /**
      * Check if ticket time is within recharge eligibility window
+     * ENFORCES 2-DAY LIMIT: Recharge cannot be used for Day 3+ tickets!
      */
     function isTicketEligible(ticketTime, rechargeTime) {
         // Ticket must be AFTER recharge
@@ -517,7 +518,7 @@ window.UnifiedPage = (function() {
         
         const window = calculateEligibilityWindow(rechargeTime);
         
-        // Check if ticket is within eligibility window
+        // Check if ticket is within eligibility window (NOT Day 3+!)
         return ticketTime.getTime() >= window.startDate.getTime() && 
                ticketTime.getTime() <= window.endDate.getTime();
     }
@@ -525,7 +526,7 @@ window.UnifiedPage = (function() {
     /**
      * BRUTE FORCE: Match entries to recharges by closest time
      * Each order number can only be bound ONCE
-     * Respects 2-day eligibility window with 8 PM cutoff
+     * ENFORCES 2-DAY ELIGIBILITY WINDOW - NO DAY 3+ TICKETS!
      */
     function bruteForceMatchRecharges() {
         console.log('💪 BRUTE FORCE MATCHING START');
@@ -611,14 +612,14 @@ window.UnifiedPage = (function() {
             }
             
             // Find OLDEST available recharge (FIFO: First In First Out)
-            // Recharge MUST be BEFORE ticket time AND within eligibility window
+            // Recharge MUST be BEFORE ticket time AND within 2-day eligibility window
             const ticketTime = entry.parsedDate;
             let oldestRecharge = null;
             let earliestTime = Infinity;
             let eligibilityRejects = 0;
             
             for (const recharge of userRecharges) {
-                // Check if ticket is eligible for this recharge (respects 2-day + cutoff window)
+                // ⚠️ ENFORCE ELIGIBILITY WINDOW: Cannot use recharge for Day 3+ tickets!
                 if (!isTicketEligible(ticketTime, recharge.rechargeTime)) {
                     eligibilityRejects++;
                     continue;
@@ -634,8 +635,8 @@ window.UnifiedPage = (function() {
             }
             
             // DEBUG: Show eligibility filtering
-            if (matchCount < 5 && eligibilityRejects > 0) {
-                console.log(`⏰ Eligibility filter: Rejected ${eligibilityRejects} recharges outside window`);
+            if (phase1Count < 5 && eligibilityRejects > 0) {
+                console.log(`⏰ Phase 1: Rejected ${eligibilityRejects} recharges outside eligibility window`);
             }
             
             // BIND IT!
@@ -665,10 +666,13 @@ window.UnifiedPage = (function() {
                 matchCount++;
                 phase1Count++;
                 
-                // DEBUG first 10 matches - SHOW OLDEST MATCHING
+                // DEBUG first 10 matches - SHOW OLDEST MATCHING with eligibility
                 if (matchCount <= 10) {
                     const rechargeTimeStr = AdminCore.formatBrazilDateTime(oldestRecharge.rechargeTime, {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
-                    console.log(`✅ Phase 1 Match ${phase1Count}: Key=${uniqueKey.substring(0, 30)}... | GameID=${entry.gameId} → OLDEST Recharge: ${rechargeTimeStr} Order=${orderToAdd.substring(0, 15)}... (R$${oldestRecharge.amount}) | BoundSize=${boundOrderNumbers.size}`);
+                    const ticketTimeStr = AdminCore.formatBrazilDateTime(entry.parsedDate, {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+                    const window = calculateEligibilityWindow(oldestRecharge.rechargeTime);
+                    const windowEndStr = AdminCore.formatBrazilDateTime(window.endDate, {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+                    console.log(`✅ Phase 1 Match ${phase1Count}: Recharge=${rechargeTimeStr} → Ticket=${ticketTimeStr} (Window ends: ${windowEndStr}) | Order=${orderToAdd.substring(0, 15)}... (R$${oldestRecharge.amount})`);
                 }
             }
         }
@@ -706,7 +710,7 @@ window.UnifiedPage = (function() {
             let earliestTime = Infinity;
             
             for (const recharge of userRecharges) {
-                // Check eligibility window
+                // ⚠️ ENFORCE ELIGIBILITY WINDOW
                 if (!isTicketEligible(ticketTime, recharge.rechargeTime)) {
                     continue;
                 }
@@ -772,7 +776,7 @@ window.UnifiedPage = (function() {
             let earliestTime = Infinity;
             
             for (const recharge of userRecharges) {
-                // Check eligibility window
+                // ⚠️ ENFORCE ELIGIBILITY WINDOW
                 if (!isTicketEligible(ticketTime, recharge.rechargeTime)) {
                     continue;
                 }
