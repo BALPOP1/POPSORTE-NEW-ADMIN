@@ -380,6 +380,11 @@ window.EntriesPage = (function() {
                 statusBadge += ' <span class="badge badge-gray" title="Registered after 20:00 BRT cutoff">CUTOFF</span>';
             }
             
+            // Add Day 2 badge if ticket uses second eligibility window
+            if (status === 'VALID' && validation?.isDay2) {
+                statusBadge += ' <span class="badge badge-warning" title="Using 2nd eligible draw day">⚠️ DAY 2</span>';
+            }
+            
             const numbersHtml = entry.numbers.map(n => {
                 const colorClass = AdminCore.getBallColorClass(n);
                 return `<span class="number-badge ${colorClass}" style="width: 24px; height: 24px; font-size: 0.6rem;">${String(n).padStart(2, '0')}</span>`;
@@ -396,10 +401,18 @@ window.EntriesPage = (function() {
                 : entry.timestamp;
             
             let rechargeInfo = '-';
-            if (validation?.matchedRecharge) {
+            // Only show recharge info for VALID tickets
+            if (status === 'VALID' && validation?.matchedRecharge) {
                 const r = validation.matchedRecharge;
+                let badge = `R$${r.amount?.toFixed(2) || '?'}`;
+                
+                // Add Day 2 badge if ticket uses second eligibility window
+                if (validation.isDay2) {
+                    badge += ' <span class="badge badge-warning" style="font-size:0.6rem;">⚠️ DAY 2</span>';
+                }
+                
                 rechargeInfo = `<span class="text-success" style="font-size: 0.75rem;">
-                    R$${r.amount?.toFixed(2) || '?'}
+                    ${badge}
                 </span>`;
             }
             
@@ -491,9 +504,27 @@ window.EntriesPage = (function() {
         }).join('');
         
         let rechargeHtml = '<p class="text-muted">No linked recharge</p>';
-        if (validation?.matchedRecharge) {
+        const status = validation?.status || 'UNKNOWN';
+        
+        // Only show recharge info for VALID tickets
+        if (status === 'VALID' && validation?.matchedRecharge) {
             const r = validation.matchedRecharge;
+            
+            // Add Day 2 warning if applicable
+            let day2Warning = '';
+            if (validation.isDay2) {
+                day2Warning = `
+                    <div class="status-banner warning mb-3">
+                        <span class="status-banner-icon">⚠️</span>
+                        <span class="status-banner-text">
+                            <strong>Day 2 Eligibility</strong> - This ticket uses the 2nd eligible draw day from the recharge
+                        </span>
+                    </div>
+                `;
+            }
+            
             rechargeHtml = `
+                ${day2Warning}
                 <div class="ticket-info-grid">
                     <div class="ticket-info-item">
                         <span class="label">Amount</span>
