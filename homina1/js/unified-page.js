@@ -458,6 +458,7 @@ window.UnifiedPage = (function() {
     // BRUTE FORCE RECHARGE MATCHING SYSTEM
     let boundOrderNumbers = new Set(); // Track used order numbers
     let entryRechargeMap = new Map(); // Map ticket number to recharge info
+    let lastMatchedDataSize = 0; // Track if data changed
     
     /**
      * BRUTE FORCE: Match entries to recharges by closest time
@@ -465,6 +466,14 @@ window.UnifiedPage = (function() {
      */
     function bruteForceMatchRecharges() {
         console.log('💪 BRUTE FORCE MATCHING START');
+        
+        // Check if we need to rematch (data size changed)
+        const currentDataSize = (currentData.entries?.length || 0) + (currentData.allRecharges?.length || 0);
+        if (lastMatchedDataSize === currentDataSize && entryRechargeMap.size > 0) {
+            console.log('✅ Using cached matches (data unchanged)');
+            return;
+        }
+        lastMatchedDataSize = currentDataSize;
         
         boundOrderNumbers.clear();
         entryRechargeMap.clear();
@@ -474,15 +483,18 @@ window.UnifiedPage = (function() {
             return;
         }
         
-        if (!filteredEntries || filteredEntries.length === 0) {
+        // USE ALL ENTRIES, not just filtered ones
+        const allEntries = currentData.entries || [];
+        
+        if (allEntries.length === 0) {
             console.log('❌ No entries available');
             return;
         }
         
-        console.log(`🔍 Matching ${filteredEntries.length} entries against ${currentData.allRecharges.length} recharges`);
+        console.log(`🔍 Matching ${allEntries.length} entries against ${currentData.allRecharges.length} recharges`);
         
         // Sort entries by time (oldest first) for chronological binding
-        const sortedEntries = [...filteredEntries].sort((a, b) => {
+        const sortedEntries = [...allEntries].sort((a, b) => {
             const ta = a.parsedDate ? a.parsedDate.getTime() : 0;
             const tb = b.parsedDate ? b.parsedDate.getTime() : 0;
             return ta - tb;
@@ -541,14 +553,21 @@ window.UnifiedPage = (function() {
                 entryRechargeMap.set(entry.ticketNumber, {
                     orderNumber: closestRecharge.rechargeId,
                     recordTime: closestRecharge.rechargeTime,
-                    amount: closestRecharge.amount
+                    amount: closestRecharge.amount,
+                    gameId: closestRecharge.gameId // Store for verification
                 });
                 matchCount++;
+                
+                // DEBUG first 5 matches - SHOW GAME ID MATCH
+                if (matchCount <= 5) {
+                    console.log(`✅ Match ${matchCount}: GameID=${entry.gameId} | Ticket=${entry.ticketNumber} → Order=${closestRecharge.rechargeId.substring(0, 15)}... (R$${closestRecharge.amount})`);
+                }
             }
         }
         
         console.log(`✅ BRUTE FORCE MATCHED: ${matchCount} tickets bound to recharges`);
         console.log(`📊 Bound order numbers: ${boundOrderNumbers.size}`);
+        console.log(`📋 Entry-Recharge map size: ${entryRechargeMap.size}`);
     }
 
     function renderEntriesTable() {
@@ -558,8 +577,8 @@ window.UnifiedPage = (function() {
             return;
         }
         
-        // BRUTE FORCE: Match recharges to entries
-        bruteForceMatchRecharges();
+        // DON'T call bruteForceMatchRecharges here - it clears the bindings!
+        // It should only be called once when data is loaded
         
         const start = (entriesPage - 1) * entriesPerPage;
         const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
@@ -608,10 +627,19 @@ window.UnifiedPage = (function() {
             // RECHARGE INFO - BRUTE FORCE MATCHING
             let rechargeInfo = '-';
             
+            // DOUBLE CHECK: ONLY show for VALID status
+            const entryCsvStatus = (entry.status || '').toUpperCase();
+            const isValidEntry = (entryCsvStatus === 'VALID' || entryCsvStatus === 'VÁLIDO');
+            
             // Get brute force matched recharge
             const bruteForceMatch = entryRechargeMap.get(entry.ticketNumber);
             
-            if (bruteForceMatch) {
+            // DEBUG first few entries
+            if (index < 5) {
+                console.log(`Entry ${index}: Ticket=${entry.ticketNumber}, Status=${entryCsvStatus}, HasMatch=${!!bruteForceMatch}, IsValid=${isValidEntry}`);
+            }
+            
+            if (isValidEntry && bruteForceMatch) {
                 const orderNumShort = bruteForceMatch.orderNumber.length > 12 
                     ? bruteForceMatch.orderNumber.substring(0, 12) + '...' 
                     : bruteForceMatch.orderNumber;
@@ -1155,6 +1183,9 @@ window.UnifiedPage = (function() {
                     rechargeAmount: v.matchedRecharge?.amount
                 })));
             }
+            
+            // BRUTE FORCE: Match recharges ONCE when data is loaded
+            bruteForceMatchRecharges();
             
             // Render all sections
             renderDashboard();
