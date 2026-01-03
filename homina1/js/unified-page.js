@@ -702,10 +702,10 @@ window.UnifiedPage = (function() {
                     minute: '2-digit'
                 });
                 
-                rechargeInfo = `<div style="font-size: 0.65rem; line-height: 1.3; word-break: break-all;">
-                    <strong class="text-success">R$ ${bruteForceMatch.amount.toFixed(2)}</strong><br>
+                rechargeInfo = `<div style="font-size: 0.8rem; line-height: 1.4; word-break: break-all;">
+                    <strong class="text-success" style="font-size: 0.9rem;">R$ ${bruteForceMatch.amount.toFixed(2)}</strong><br>
                     <span style="color: var(--text-tertiary);">${fullOrderNumber}</span><br>
-                    <span style="color: var(--text-muted); font-size: 0.6rem;">${timeStr}</span>
+                    <span style="color: var(--text-muted); font-size: 0.7rem;">${timeStr}</span>
                 </div>`;
             }
             
@@ -714,9 +714,6 @@ window.UnifiedPage = (function() {
             
             // Format draw date
             const formattedDrawDate = formatDrawDate(entry.drawDate);
-            
-            // Create unique key for Details button (ticket numbers are NOT unique!)
-            const uniqueKey = `${entry.gameId}-${entry.parsedDate ? entry.parsedDate.getTime() : 0}`;
             
             return `
                 <tr>
@@ -727,13 +724,12 @@ window.UnifiedPage = (function() {
                     <td style="font-size:0.75rem">${whatsappDisplay}</td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
                     <td style="font-size:0.8rem">${formattedDrawDate}</td>
-                    <td><span class="badge badge-info">${entry.contest}</span></td>
-                    <td style="font-size:0.9rem">${entry.ticketNumber}</td>
-                    <td>${rechargeInfo}</td>
-                    <td><button class="btn btn-sm btn-outline" onclick="UnifiedPage.showTicketDetails('${uniqueKey}')">Details</button></td>
-                </tr>
-            `;
-            }).join('');
+                <td><span class="badge badge-info">${entry.contest}</span></td>
+                <td style="font-size:0.9rem">${entry.ticketNumber}</td>
+                <td>${rechargeInfo}</td>
+            </tr>
+        `;
+        }).join('');
             
             console.log('✅ Table HTML generated successfully');
         } catch (error) {
@@ -769,23 +765,9 @@ window.UnifiedPage = (function() {
         renderEntriesPagination();
     }
 
-    function showTicketDetails(uniqueKey) {
-        // Parse uniqueKey: "gameId-timestamp"
-        const dashIndex = uniqueKey.lastIndexOf('-');
-        const gameId = uniqueKey.substring(0, dashIndex);
-        const timestamp = parseInt(uniqueKey.substring(dashIndex + 1), 10);
-        
-        // Find entry by EXACT gameId AND timestamp match
-        const entry = currentData.entries.find(e => 
-            e.gameId === gameId && 
-            e.parsedDate && 
-            e.parsedDate.getTime() === timestamp
-        );
-        
-        if (!entry) {
-            console.error('Entry not found for uniqueKey:', uniqueKey);
-            return;
-        }
+    function showTicketDetails(ticketNumber) {
+        const entry = currentData.entries.find(e => e.ticketNumber === ticketNumber);
+        if (!entry) return;
         
         const modalContent = document.getElementById('ticketModalContent');
         if (!modalContent) return;
@@ -1384,7 +1366,6 @@ window.UnifiedPage = (function() {
         init,
         loadAllData,
         goToEntriesPage,
-        showTicketDetails,
         exportEntriesCSV,
         exportWinnersCSV
     };
