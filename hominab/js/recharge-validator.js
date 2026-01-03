@@ -567,6 +567,155 @@ window.RechargeValidator = (function() {
         getRecharges() {
             return this.recharges;
         }
+
+        /**
+         * Validate all tickets (compatibility wrapper for old API)
+         * @param {Array} entries - Array of entry objects
+         * @param {Array} recharges - Array of recharge objects
+         * @returns {Object} Validation results with stats
+         */
+        async validateAllTickets(entries, recharges) {
+            // Store recharges for validation
+            this.recharges = recharges.map(r => ({
+                gameId: r.gameId,
+                rechargeId: r.rechargeId,
+                rechargeTime: r.rechargeTimeRaw || r.rechargeTime,
+                rechargeAmount: r.amount,
+                rechargeStatus: 'VALID',
+                rechargeSource: r.source || '三方',
+                rechargeTimeObj: r.rechargeTime instanceof Date ? r.rechargeTime : this.parseBrazilTime(r.rechargeTime || r.rechargeTimeRaw)
+            }));
+
+            // Validate entries
+            const results = this.validateEntries(entries);
+            
+            // Get statistics
+            const stats = this.getStatistics();
+            
+            return {
+                results: results,
+                stats: {
+                    total: entries.length,
+                    valid: stats.validTickets,
+                    invalid: stats.invalidTickets,
+                    unknown: stats.unknownTickets,
+                    cutoff: stats.cutoffShiftCases
+                },
+                rechargeCount: recharges.length
+            };
+        }
+
+        /**
+         * Analyze engagement between rechargers and ticket creators
+         * @param {Array} entries - All entries
+         * @param {Array} recharges - All recharges
+         * @returns {Object} Engagement statistics
+         */
+        analyzeEngagement(entries, recharges) {
+            // Get unique game IDs
+            const rechargerIds = new Set(recharges.map(r => r.gameId).filter(Boolean));
+            const ticketCreatorIds = new Set(entries.map(e => e.gameId).filter(Boolean));
+            
+            // Calculate overlaps
+            const participantIds = new Set(
+                [...ticketCreatorIds].filter(id => rechargerIds.has(id))
+            );
+            
+            const rechargedNoTicket = new Set(
+                [...rechargerIds].filter(id => !ticketCreatorIds.has(id))
+            );
+            
+            // Multi-recharge analysis
+            const rechargeCounts = {};
+            recharges.forEach(r => {
+                if (!r.gameId) return;
+                rechargeCounts[r.gameId] = (rechargeCounts[r.gameId] || 0) + 1;
+            });
+            
+            const multiRechargers = Object.entries(rechargeCounts)
+                .filter(([_, count]) => count > 1)
+                .map(([id, _]) => id);
+            
+            const multiRechargeNoTicket = multiRechargers.filter(id => !ticketCreatorIds.has(id));
+            
+            return {
+                totalRechargers: rechargerIds.size,
+                totalParticipants: participantIds.size,
+                rechargedNoTicket: rechargedNoTicket.size,
+                participationRate: rechargerIds.size > 0 
+                    ? ((participantIds.size / rechargerIds.size) * 100).toFixed(1)
+                    : 0,
+                multiRechargeNoTicket: multiRechargeNoTicket.length,
+                rechargerIds: [...rechargerIds],
+                participantIds: [...participantIds],
+                rechargedNoTicketIds: [...rechargedNoTicket]
+            };
+        }
+
+        /**
+         * Analyze engagement by date
+         * @param {Array} entries - All entries
+         * @param {Array} recharges - All recharges
+         * @param {number} days - Number of days to analyze
+         * @returns {Array} Daily engagement data
+         */
+        analyzeEngagementByDate(entries, recharges, days = 7) {
+            const dailyData = [];
+            const now = new Date();
+            
+            // Helper to get BRT date string
+            const getBRTDateString = (date) => {
+                const f = brtFields(date);
+                return `${f.year}-${String(f.month + 1).padStart(2, '0')}-${String(f.day).padStart(2, '0')}`;
+            };
+            
+            // Pre-compute date strings for all entries
+            const entriesByDate = new Map();
+            entries.forEach(e => {
+                if (e.parsedDate && e.parsedDate instanceof Date && !isNaN(e.parsedDate.getTime())) {
+                    const dateStr = getBRTDateString(e.parsedDate);
+                    if (!entriesByDate.has(dateStr)) {
+                        entriesByDate.set(dateStr, []);
+                    }
+                    entriesByDate.get(dateStr).push(e);
+                }
+            });
+            
+            // Pre-compute date strings for all recharges
+            const rechargesByDate = new Map();
+            recharges.forEach(r => {
+                const rechargeTime = r.rechargeTime instanceof Date ? r.rechargeTime : null;
+                if (rechargeTime && !isNaN(rechargeTime.getTime())) {
+                    const dateStr = getBRTDateString(rechargeTime);
+                    if (!rechargesByDate.has(dateStr)) {
+                        rechargesByDate.set(dateStr, []);
+                    }
+                    rechargesByDate.get(dateStr).push(r);
+                }
+            });
+            
+            for (let i = 0; i < days; i++) {
+                const date = new Date(now);
+                date.setDate(date.getDate() - i);
+                const dateStr = getBRTDateString(date);
+                
+                // Use pre-computed maps
+                const dayEntries = entriesByDate.get(dateStr) || [];
+                const dayRecharges = rechargesByDate.get(dateStr) || [];
+                
+                const engagement = this.analyzeEngagement(dayEntries, dayRecharges);
+                
+                const f = brtFields(date);
+                dailyData.push({
+                    date: dateStr,
+                    displayDate: `${String(f.day).padStart(2, '0')}/${String(f.month + 1).padStart(2, '0')}`,
+                    totalEntries: dayEntries.length,
+                    ...engagement
+                });
+            }
+            
+            return dailyData;
+        }
     }
 
     // Global instance
@@ -582,10 +731,15 @@ window.RechargeValidator = (function() {
         // Convenience methods
         fetchRechargeData: () => rechargeValidator.fetchRechargeData(),
         validateEntries: (entries) => rechargeValidator.validateEntries(entries),
+        validateAllTickets: (entries, recharges) => rechargeValidator.validateAllTickets(entries, recharges),
         getStatistics: () => rechargeValidator.getStatistics(),
         getValidatedEntries: () => rechargeValidator.getValidatedEntries(),
         getRecharges: () => rechargeValidator.getRecharges(),
         getReasonCodeText: (code) => rechargeValidator.getReasonCodeText(code),
+        
+        // Engagement analysis
+        analyzeEngagement: (entries, recharges) => rechargeValidator.analyzeEngagement(entries, recharges),
+        analyzeEngagementByDate: (entries, recharges, days) => rechargeValidator.analyzeEngagementByDate(entries, recharges, days),
         
         // Validation Status Constants
         ValidationStatus: {
