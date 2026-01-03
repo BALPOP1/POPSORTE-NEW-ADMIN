@@ -455,6 +455,102 @@ window.UnifiedPage = (function() {
         return drawDate;
     }
 
+    // BRUTE FORCE RECHARGE MATCHING SYSTEM
+    let boundOrderNumbers = new Set(); // Track used order numbers
+    let entryRechargeMap = new Map(); // Map ticket number to recharge info
+    
+    /**
+     * BRUTE FORCE: Match entries to recharges by closest time
+     * Each order number can only be bound ONCE
+     */
+    function bruteForceMatchRecharges() {
+        console.log('💪 BRUTE FORCE MATCHING START');
+        
+        boundOrderNumbers.clear();
+        entryRechargeMap.clear();
+        
+        if (!currentData.allRecharges || currentData.allRecharges.length === 0) {
+            console.log('❌ No recharges available');
+            return;
+        }
+        
+        if (!filteredEntries || filteredEntries.length === 0) {
+            console.log('❌ No entries available');
+            return;
+        }
+        
+        console.log(`🔍 Matching ${filteredEntries.length} entries against ${currentData.allRecharges.length} recharges`);
+        
+        // Sort entries by time (oldest first) for chronological binding
+        const sortedEntries = [...filteredEntries].sort((a, b) => {
+            const ta = a.parsedDate ? a.parsedDate.getTime() : 0;
+            const tb = b.parsedDate ? b.parsedDate.getTime() : 0;
+            return ta - tb;
+        });
+        
+        let matchCount = 0;
+        
+        for (const entry of sortedEntries) {
+            // ONLY match VALID entries
+            const csvStatus = (entry.status || '').toUpperCase();
+            if (csvStatus !== 'VALID' && csvStatus !== 'VÁLIDO') {
+                continue;
+            }
+            
+            if (!entry.parsedDate || !entry.gameId) {
+                continue;
+            }
+            
+            // Find all recharges for this game ID
+            const userRecharges = currentData.allRecharges.filter(r => 
+                r.gameId === entry.gameId && 
+                r.rechargeTime instanceof Date &&
+                !isNaN(r.rechargeTime.getTime()) &&
+                r.rechargeId && 
+                !boundOrderNumbers.has(r.rechargeId) // NOT already bound
+            );
+            
+            if (userRecharges.length === 0) {
+                continue;
+            }
+            
+            // Find CLOSEST recharge by time (must be BEFORE ticket)
+            const ticketTime = entry.parsedDate.getTime();
+            let closestRecharge = null;
+            let smallestDiff = Infinity;
+            
+            for (const recharge of userRecharges) {
+                const rechargeTime = recharge.rechargeTime.getTime();
+                
+                // Recharge must be BEFORE ticket
+                if (rechargeTime >= ticketTime) {
+                    continue;
+                }
+                
+                const timeDiff = ticketTime - rechargeTime;
+                
+                if (timeDiff < smallestDiff) {
+                    smallestDiff = timeDiff;
+                    closestRecharge = recharge;
+                }
+            }
+            
+            // BIND IT!
+            if (closestRecharge) {
+                boundOrderNumbers.add(closestRecharge.rechargeId);
+                entryRechargeMap.set(entry.ticketNumber, {
+                    orderNumber: closestRecharge.rechargeId,
+                    recordTime: closestRecharge.rechargeTime,
+                    amount: closestRecharge.amount
+                });
+                matchCount++;
+            }
+        }
+        
+        console.log(`✅ BRUTE FORCE MATCHED: ${matchCount} tickets bound to recharges`);
+        console.log(`📊 Bound order numbers: ${boundOrderNumbers.size}`);
+    }
+
     function renderEntriesTable() {
         const tbody = document.getElementById('entriesTableBody');
         if (!tbody) {
@@ -462,15 +558,8 @@ window.UnifiedPage = (function() {
             return;
         }
         
-        console.log('🔍 RECHARGE DATA CHECK:');
-        console.log('   Total allRecharges:', currentData.allRecharges?.length || 0);
-        if (currentData.allRecharges && currentData.allRecharges.length > 0) {
-            console.log('   First recharge:', currentData.allRecharges[0]);
-            console.log('   First 3 gameIds:', currentData.allRecharges.slice(0, 3).map(r => r.gameId));
-        }
-        if (filteredEntries.length > 0) {
-            console.log('   First entry gameId:', filteredEntries[0].gameId);
-        }
+        // BRUTE FORCE: Match recharges to entries
+        bruteForceMatchRecharges();
         
         const start = (entriesPage - 1) * entriesPerPage;
         const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
@@ -516,22 +605,28 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // RECHARGE INFO - BRUTE FORCE: USE CSV STATUS + VALIDATION DATA
+            // RECHARGE INFO - BRUTE FORCE MATCHING
             let rechargeInfo = '-';
             
-            // Get validation result for this entry
-            const validation = validationMap.get(entry.ticketNumber);
-            const isDay2 = validation?.isDay2 || false;
+            // Get brute force matched recharge
+            const bruteForceMatch = entryRechargeMap.get(entry.ticketNumber);
             
-            // BRUTE FORCE: Show recharge info if CSV status is VALID/VÁLIDO AND validation has recharge data
-            const csvStatusUpper = (entry.status || '').toUpperCase();
-            if ((csvStatusUpper === 'VALID' || csvStatusUpper === 'VÁLIDO') && validation?.matchedRecharge) {
-                const r = validation.matchedRecharge;
-                const day2Badge = isDay2 ? '<br><span class="badge badge-warning" style="font-size: 0.6rem; padding: 2px 4px;">⚠️ DAY 2</span>' : '';
-                const orderNumShort = r.rechargeId ? r.rechargeId.substring(0, 12) + '...' : '-';
+            if (bruteForceMatch) {
+                const orderNumShort = bruteForceMatch.orderNumber.length > 12 
+                    ? bruteForceMatch.orderNumber.substring(0, 12) + '...' 
+                    : bruteForceMatch.orderNumber;
+                
+                const timeStr = AdminCore.formatBrazilDateTime(bruteForceMatch.recordTime, {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
                 rechargeInfo = `<div style="font-size: 0.7rem; line-height: 1.3;">
-                    <strong class="text-success">R$${r.amount?.toFixed(2) || '?'}</strong><br>
-                    <span style="color: var(--text-tertiary);" title="${r.rechargeId || ''}">${orderNumShort}</span>${day2Badge}
+                    <strong class="text-success">R$ ${bruteForceMatch.amount.toFixed(2)}</strong><br>
+                    <span style="color: var(--text-tertiary);" title="${bruteForceMatch.orderNumber}">${orderNumShort}</span><br>
+                    <span style="color: var(--text-muted); font-size: 0.65rem;">${timeStr}</span>
                 </div>`;
             }
             
