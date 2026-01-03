@@ -98,9 +98,12 @@ window.UnifiedPage = (function() {
             // Ticket created on eligibility Day 1
             // If Day 2 participation exists, check if ticket was created AFTER 8 PM
             if (hasDay2Participation) {
-                // Get hour in Brazilian timezone more efficiently
+                // Get hour in Brazilian timezone
+                // parseBrazilDateTime stores dates as UTC with BRT hour + 3
+                // So BRT 20:36 → UTC 23:36
+                // To get BRT from UTC: UTC - 3 (with wraparound)
                 const utcHour = ticketTime.getUTCHours();
-                const brtHour = (utcHour + 3) % 24; // Convert UTC to BRT
+                const brtHour = (utcHour - 3 + 24) % 24; // Convert UTC to BRT (subtract 3, handle wraparound)
                 return brtHour >= 20; // After 8 PM on eligibility Day 1 → CUTOFF
             }
             return false; // No Day 2 participation, no cutoff
@@ -1143,11 +1146,12 @@ window.UnifiedPage = (function() {
                         // Ticket created on eligibility Day 1
                         // If Day 2 participation exists, check if ticket was created AFTER 8 PM
                         if (hasDay2Participation) {
-                            // Get hour in Brazilian timezone more efficiently
-                            // Date is stored as UTC representing Brazilian time (UTC-3)
-                            // So UTC hour 23 = BRT hour 20 (8 PM)
+                            // Get hour in Brazilian timezone
+                            // parseBrazilDateTime stores dates as UTC with BRT hour + 3
+                            // So BRT 20:36 → UTC 23:36
+                            // To get BRT from UTC: UTC - 3 (with wraparound)
                             const utcHour = ticketTime.getUTCHours();
-                            const brtHour = (utcHour + 3) % 24; // Convert UTC to BRT
+                            const brtHour = (utcHour - 3 + 24) % 24; // Convert UTC to BRT (subtract 3, handle wraparound)
                             
                             if (brtHour >= 20) {
                                 isCutoff = true; // After 8 PM on eligibility Day 1 → CUTOFF (participates Day 2)
