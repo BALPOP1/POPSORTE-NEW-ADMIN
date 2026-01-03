@@ -323,12 +323,18 @@ window.DataFetcher = (function() {
         let rechargeTime = null;
         if (timestampStr) {
             // Check for potential date format (DD/MM vs MM/DD)
-            // By default try DD/MM/YYYY
-            const dmyMatch = timestampStr.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
+            // By default try DD/MM/YYYY or DD/MM/YY
+            const dmyMatch = timestampStr.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
             if (dmyMatch) {
                 let day = parseInt(dmyMatch[1], 10);
                 let month = parseInt(dmyMatch[2], 10) - 1; // 0-indexed
-                const year = parseInt(dmyMatch[3], 10);
+                let year = parseInt(dmyMatch[3], 10);
+                
+                // Handle 2-digit years
+                if (year < 100) {
+                    year += 2000;
+                }
+
                 const hour = parseInt(dmyMatch[4], 10);
                 const minute = parseInt(dmyMatch[5], 10);
                 const second = parseInt(dmyMatch[6], 10);

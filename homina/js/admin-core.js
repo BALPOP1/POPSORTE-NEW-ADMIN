@@ -183,9 +183,17 @@ window.AdminCore = (function() {
         if (!str) return null;
         try {
             const [datePart, timePart = '00:00:00'] = str.trim().split(' ');
-            const [d, m, y] = datePart.split(/[\/\-]/).map(Number);
+            let [d, m, y] = datePart.split(/[\/\-]/).map(Number);
             const [hh = 0, mm = 0, ss = 0] = timePart.split(':').map(Number);
+            
             if (!d || !m || !y) return null;
+            
+            // Handle 2-digit years (e.g. 26 -> 2026)
+            // Assumes 20xx for any 2-digit year
+            if (y < 100) {
+                y += 2000;
+            }
+            
             // Create date in BRT (UTC-3)
             return new Date(Date.UTC(y, m - 1, d, hh + 3, mm, ss));
         } catch {
