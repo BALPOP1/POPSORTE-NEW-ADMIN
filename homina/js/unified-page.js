@@ -527,12 +527,37 @@ window.UnifiedPage = (function() {
                     amountDisplay += ' <span class="badge badge-warning" style="font-size:0.6rem;">⚠️ DAY 2</span>';
                 }
                 
-                rechargeInfo = `<div class="recharge-amount"><strong>${amountDisplay}</strong></div>`;
+                // Order Number (shortened)
+                const orderNumber = r.rechargeId || '';
+                const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
+                
+                // Recharge Time
+                let timeDisplay = '-';
+                if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                    timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+                } else if (r.rechargeTimeRaw) {
+                    timeDisplay = r.rechargeTimeRaw;
+                }
+                
+                rechargeInfo = `
+                    <div class="recharge-details">
+                        <div class="recharge-id" title="Order: ${orderNumber}" style="font-size:0.65rem;color:var(--text-secondary);margin-bottom:2px;">${shortOrderNumber}</div>
+                        <div class="recharge-time" style="font-size:0.7rem;color:var(--text-muted);margin-bottom:2px;">${timeDisplay}</div>
+                        <div class="recharge-amount"><strong style="color:var(--success);">${amountDisplay}</strong></div>
+                    </div>
+                `;
                 
                 // Debug first entry with recharge
                 if (index === 0) {
                     console.log('💰 VALID RECHARGE for first entry:');
                     console.log('   Game ID:', entry.gameId);
+                    console.log('   Order:', shortOrderNumber);
+                    console.log('   Time:', timeDisplay);
                     console.log('   Amount:', chargeAmount);
                     console.log('   Day 2:', validationResult.isDay2);
                 }

@@ -404,16 +404,37 @@ window.EntriesPage = (function() {
             // Only show recharge info for VALID tickets
             if (status === 'VALID' && validation?.matchedRecharge) {
                 const r = validation.matchedRecharge;
-                let badge = `R$${r.amount?.toFixed(2) || '?'}`;
+                let amountBadge = `R$${r.amount?.toFixed(2) || '?'}`;
                 
                 // Add Day 2 badge if ticket uses second eligibility window
                 if (validation.isDay2) {
-                    badge += ' <span class="badge badge-warning" style="font-size:0.6rem;">⚠️ DAY 2</span>';
+                    amountBadge += ' <span class="badge badge-warning" style="font-size:0.6rem;">⚠️ DAY 2</span>';
                 }
                 
-                rechargeInfo = `<span class="text-success" style="font-size: 0.75rem;">
-                    ${badge}
-                </span>`;
+                // Order Number (shortened)
+                const orderNumber = r.rechargeId || '';
+                const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
+                
+                // Recharge Time
+                let timeDisplay = '-';
+                if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                    timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+                } else if (r.rechargeTimeRaw) {
+                    timeDisplay = r.rechargeTimeRaw;
+                }
+                
+                rechargeInfo = `
+                    <div style="font-size: 0.7rem;">
+                        <div style="color:var(--text-secondary);margin-bottom:2px;" title="${orderNumber}">${shortOrderNumber}</div>
+                        <div style="color:var(--text-muted);margin-bottom:2px;">${timeDisplay}</div>
+                        <div><strong style="color:var(--success);">${amountBadge}</strong></div>
+                    </div>
+                `;
             }
             
             return `
