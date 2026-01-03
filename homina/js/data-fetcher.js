@@ -319,24 +319,40 @@ window.DataFetcher = (function() {
             return null;
         }
         
-        // Parse timestamp from column 5: DD/MM/YYYY HH:MM:SS
+        // Parse timestamp from column 5: DD/MM/YYYY HH:MM:SS or MM/DD/YYYY
         let rechargeTime = null;
         if (timestampStr) {
-            // Try DD/MM/YYYY HH:MM:SS format
-            const dmyMatch = timestampStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
+            // Check for potential date format (DD/MM vs MM/DD)
+            // By default try DD/MM/YYYY
+            const dmyMatch = timestampStr.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\s+(\d{1,2}):(\d{1,2}):(\d{1,2})/);
             if (dmyMatch) {
-                // Parse date components
-                const day = parseInt(dmyMatch[1], 10);
-                const month = parseInt(dmyMatch[2], 10) - 1; // Month is 0-indexed
+                let day = parseInt(dmyMatch[1], 10);
+                let month = parseInt(dmyMatch[2], 10) - 1; // 0-indexed
                 const year = parseInt(dmyMatch[3], 10);
                 const hour = parseInt(dmyMatch[4], 10);
                 const minute = parseInt(dmyMatch[5], 10);
                 const second = parseInt(dmyMatch[6], 10);
                 
-                // Create date string in ISO format (treating as local time, will be converted correctly)
-                // Format: YYYY-MM-DDTHH:MM:SS
-                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
-                rechargeTime = new Date(dateStr);
+                let date = new Date(year, month, day, hour, minute, second);
+                
+                // Heuristic: If date is in the future (e.g. Feb 1st when today is Jan 3rd), 
+                // and swapping D/M makes it valid past date (Jan 2nd), then SWAP.
+                // Or if parsing as DD/MM makes sense but MM/DD doesn't (e.g. 25/01).
+                
+                const now = new Date();
+                const oneDayFuture = new Date(now.getTime() + 86400000); // Allow 1 day drift
+                
+                if (date > oneDayFuture && day <= 12) {
+                    // Try swapping month/day
+                    const swappedDate = new Date(year, day - 1, month + 1, hour, minute, second);
+                    if (swappedDate <= oneDayFuture) {
+                        // It was MM/DD !
+                        // console.log('Detected MM/DD format, swapping:', timestampStr);
+                        date = swappedDate;
+                    }
+                }
+                
+                rechargeTime = date;
             } else {
                 // Try ISO format as fallback
                 const isoMatch = timestampStr.match(/(\d{4}[-\/]\d{2}[-\/]\d{2}[\sT]\d{2}:\d{2}:\d{2})/);

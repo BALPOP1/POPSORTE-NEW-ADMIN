@@ -548,11 +548,12 @@ window.UnifiedPage = (function() {
                     timeDisplay = r.rechargeTimeRaw;
                 }
                 
+                // Make style explicit to avoid CSS missing vars
                 rechargeInfo = `
-                    <div class="recharge-details">
-                        <div class="recharge-id" title="Order: ${orderNumber}" style="font-size:0.65rem;color:var(--text-secondary);margin-bottom:2px;">${shortOrderNumber}</div>
-                        <div class="recharge-time" style="font-size:0.7rem;color:var(--text-muted);margin-bottom:2px;">${timeDisplay}</div>
-                        <div class="recharge-amount"><strong style="color:var(--success);">${amountDisplay}</strong></div>
+                    <div class="recharge-details" style="font-size:0.75rem; line-height:1.2;">
+                        <div title="Order: ${orderNumber}" style="color:#888; margin-bottom:2px; font-size:0.65rem;">${shortOrderNumber}</div>
+                        <div style="color:#aaa; margin-bottom:2px; font-size:0.7rem;">${timeDisplay}</div>
+                        <div><strong style="color:#10b981;">${amountDisplay}</strong></div>
                     </div>
                 `;
                 
