@@ -3,7 +3,7 @@
  * 
  * This module renders the entries management page with:
  * - Validation status banner
- * - Statistics row (Valid/Invalid/Cutoff/Total)
+ * - Statistics row (Valid/Invalid/Day2Valid/Total)
  * - Full entries table with filters
  * - Pagination (25/50/100 per page)
  * - CSV export
@@ -33,7 +33,7 @@ window.EntriesPage = (function() {
         contest: '',
         drawDate: '',
         validity: 'all',
-        cutoff: 'all'
+        day2: 'all'
     };
     let cachedValidationMap = null;
     let isFiltering = false;
@@ -62,8 +62,8 @@ window.EntriesPage = (function() {
                         <span class="stat-value" id="statInvalid">--</span>
                     </div>
                     <div class="stat-card warning">
-                        <span class="stat-label" title="Registered after 20:00 BRT cutoff">⏰ After Cutoff</span>
-                        <span class="stat-value" id="statCutoff">--</span>
+                        <span class="stat-label" title="Valid tickets using Day 2 eligibility">⚠️ Day 2 Valid</span>
+                        <span class="stat-value" id="statDay2Valid">--</span>
                     </div>
                     <div class="stat-card primary">
                         <span class="stat-label" title="Total recharge transactions">📊 Total Recharges</span>
@@ -102,11 +102,11 @@ window.EntriesPage = (function() {
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label>Cutoff</label>
-                        <select id="filterCutoff">
+                        <label>Eligibility</label>
+                        <select id="filterDay2">
                             <option value="all">All</option>
-                            <option value="yes">After Cutoff</option>
-                            <option value="no">Before Cutoff</option>
+                            <option value="day1">Day 1 Only</option>
+                            <option value="day2">Day 2 Only</option>
                         </select>
                     </div>
                     <div class="filter-actions">
@@ -206,7 +206,7 @@ window.EntriesPage = (function() {
         if (validationResults) {
             document.getElementById('statValid').textContent = validationResults.stats.valid.toLocaleString();
             document.getElementById('statInvalid').textContent = validationResults.stats.invalid.toLocaleString();
-            document.getElementById('statCutoff').textContent = validationResults.stats.cutoff.toLocaleString();
+            document.getElementById('statDay2Valid').textContent = (validationResults.stats.day2Valid || 0).toLocaleString();
         }
         
         document.getElementById('statRecharges').textContent = recharges.length.toLocaleString();
@@ -302,11 +302,20 @@ window.EntriesPage = (function() {
                 });
             }
             
-            if (filters.cutoff !== 'all') {
+            if (filters.day2 !== 'all') {
                 result = result.filter(e => {
                     const validation = findValidationForEntry(e, validationMap);
-                    const isCutoff = validation?.isCutoff || false;
-                    return filters.cutoff === 'yes' ? isCutoff : !isCutoff;
+                    const status = validation?.status || 'UNKNOWN';
+                    const isDay2 = validation?.isDay2 || false;
+                    
+                    // Only filter valid tickets by day2
+                    if (status !== 'VALID') return false;
+                    
+                    switch (filters.day2) {
+                        case 'day1': return !isDay2;
+                        case 'day2': return isDay2;
+                        default: return true;
+                    }
                 });
             }
             
@@ -326,7 +335,7 @@ window.EntriesPage = (function() {
             contest: '',
             drawDate: '',
             validity: 'all',
-            cutoff: 'all'
+            day2: 'all'
         };
         
         document.getElementById('filterGameId').value = '';
@@ -334,7 +343,7 @@ window.EntriesPage = (function() {
         document.getElementById('filterContest').value = '';
         document.getElementById('filterDrawDate').value = '';
         document.getElementById('filterValidity').value = 'all';
-        document.getElementById('filterCutoff').value = 'all';
+        document.getElementById('filterDay2').value = 'all';
         
         applyFilters();
     }
@@ -342,6 +351,25 @@ window.EntriesPage = (function() {
     // ============================================
     // Table Rendering
     // ============================================
+    
+    /**
+     * Format draw date from ISO (2026-01-02) to DD/MM/YYYY
+     * @param {string} drawDate - Draw date string
+     * @returns {string} Formatted date
+     */
+    function formatDrawDate(drawDate) {
+        if (!drawDate) return '-';
+        const parts = drawDate.split(/[-\/]/);
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                // ISO: YYYY-MM-DD → DD/MM/YYYY
+                return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+            // Already DD/MM/YYYY
+            return drawDate;
+        }
+        return drawDate;
+    }
     
     function renderTable() {
         const tbody = document.getElementById('entriesTableBody');
@@ -361,23 +389,23 @@ window.EntriesPage = (function() {
         tbody.innerHTML = pageEntries.map(entry => {
             const validation = findValidationForEntry(entry, validationMap);
             const status = validation?.status || 'UNKNOWN';
-            const isCutoff = validation?.isCutoff || false;
+            const isDay2 = validation?.isDay2 || false;
             
             const reason = validation?.reason || '';
             let statusBadge = '';
             switch (status) {
                 case 'VALID':
                     statusBadge = `<span class="badge badge-success" title="${reason}">✅ VALID</span>`;
+                    // Add Day 2 badge for valid tickets using Day 2 eligibility
+                    if (isDay2) {
+                        statusBadge += ' <span class="badge badge-warning" title="Used Day 2 eligibility">⚠️ DAY 2</span>';
+                    }
                     break;
                 case 'INVALID':
                     statusBadge = `<span class="badge badge-danger" title="${reason}">❌ INVALID</span>`;
                     break;
                 default:
                     statusBadge = '<span class="badge badge-warning" title="Validation pending">⏳ PENDING</span>';
-            }
-            
-            if (isCutoff) {
-                statusBadge += ' <span class="badge badge-gray" title="Registered after 20:00 BRT cutoff">CUTOFF</span>';
             }
             
             const numbersHtml = entry.numbers.map(n => {
@@ -389,19 +417,25 @@ window.EntriesPage = (function() {
                 ? AdminCore.formatBrazilDateTime(entry.parsedDate, {
                     day: '2-digit',
                     month: '2-digit',
-                    year: '2-digit',
+                    year: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'
                 })
                 : entry.timestamp;
             
             let rechargeInfo = '-';
-            if (validation?.matchedRecharge) {
+            // ONLY show recharge info for VALID status
+            if (status === 'VALID' && validation?.matchedRecharge) {
                 const r = validation.matchedRecharge;
-                rechargeInfo = `<span class="text-success" style="font-size: 0.75rem;">
-                    R$${r.amount?.toFixed(2) || '?'}
-                </span>`;
+                const day2Badge = isDay2 ? '<br><span class="badge badge-warning" style="font-size: 0.6rem; padding: 2px 4px;">⚠️ DAY 2</span>' : '';
+                const orderNumShort = r.rechargeId ? r.rechargeId.substring(0, 12) + '...' : '-';
+                rechargeInfo = `<div style="font-size: 0.7rem; line-height: 1.3;">
+                    <strong class="text-success">R$${r.amount?.toFixed(2) || '?'}</strong><br>
+                    <span style="color: var(--text-tertiary);" title="${r.rechargeId || ''}">${orderNumShort}</span>${day2Badge}
+                </div>`;
             }
+            
+            const formattedDrawDate = formatDrawDate(entry.drawDate);
             
             return `
                 <tr>
@@ -411,7 +445,7 @@ window.EntriesPage = (function() {
                     <td><strong>${entry.gameId}</strong></td>
                     <td>${AdminCore.maskWhatsApp(entry.whatsapp)}</td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
-                    <td>${entry.drawDate}</td>
+                    <td>${formattedDrawDate}</td>
                     <td>${entry.contest}</td>
                     <td style="font-size: 0.75rem;">${entry.ticketNumber}</td>
                     <td>${rechargeInfo}</td>
@@ -474,12 +508,13 @@ window.EntriesPage = (function() {
                 'UNKNOWN': 'warning'
             }[status] || 'warning';
             
+            const day2Badge = validation.isDay2 ? '<br><span class="text-warning">⚠️ Used Day 2 eligibility</span>' : '';
             statusHtml = `
                 <div class="status-banner ${statusClass} mb-4">
                     <span class="status-banner-icon">${status === 'VALID' ? '✅' : status === 'INVALID' ? '❌' : '⏳'}</span>
                     <span class="status-banner-text">
                         <strong>${status}</strong> - ${validation.reason || 'Checking...'}
-                        ${validation.isCutoff ? '<br><span class="text-warning">⚠️ Registered after cutoff time</span>' : ''}
+                        ${day2Badge}
                     </span>
                 </div>
             `;
@@ -491,8 +526,14 @@ window.EntriesPage = (function() {
         }).join('');
         
         let rechargeHtml = '<p class="text-muted">No linked recharge</p>';
-        if (validation?.matchedRecharge) {
+        // ONLY show for VALID status
+        if (validation?.status === 'VALID' && validation?.matchedRecharge) {
             const r = validation.matchedRecharge;
+            const eligible1Str = r.eligible1 ? AdminCore.formatBrazilDateTime(r.eligible1, {day: '2-digit', month: '2-digit', year: 'numeric'}) : '-';
+            const eligible2Str = r.eligible2 ? AdminCore.formatBrazilDateTime(r.eligible2, {day: '2-digit', month: '2-digit', year: 'numeric'}) : '-';
+            const dayUsed = validation.isDay2 ? '(Used Day 2)' : '(Used Day 1)';
+            const cutoffNote = r.isCutoff ? '<span class="badge badge-warning">⚠️ After 8 PM Cutoff</span>' : '';
+            
             rechargeHtml = `
                 <div class="ticket-info-grid">
                     <div class="ticket-info-item">
@@ -501,11 +542,18 @@ window.EntriesPage = (function() {
                     </div>
                     <div class="ticket-info-item">
                         <span class="label">Recharge ID</span>
-                        <span class="value">${r.rechargeId || '-'}</span>
+                        <span class="value" style="font-size: 0.7rem;">${r.rechargeId || '-'}</span>
                     </div>
                     <div class="ticket-info-item">
-                        <span class="label">Date/Time</span>
-                        <span class="value">${r.rechargeTime ? AdminCore.formatBrazilDateTime(r.rechargeTime) : '-'}</span>
+                        <span class="label">Recharge Time</span>
+                        <span class="value">
+                            ${r.rechargeTime ? AdminCore.formatBrazilDateTime(r.rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}) : '-'}
+                            ${cutoffNote}
+                        </span>
+                    </div>
+                    <div class="ticket-info-item">
+                        <span class="label">Eligibility Window</span>
+                        <span class="value">${eligible1Str} - ${eligible2Str} ${dayUsed}</span>
                     </div>
                 </div>
             `;
@@ -574,8 +622,8 @@ window.EntriesPage = (function() {
         }
         
         const headers = [
-            'Status', 'Date/Time', 'Platform', 'Game ID', 'WhatsApp',
-            'Numbers', 'Draw Date', 'Contest', 'Ticket #', 'Original Status'
+            'Status', 'Day2', 'Date/Time', 'Platform', 'Game ID', 'WhatsApp',
+            'Numbers', 'Draw Date', 'Contest', 'Ticket #', 'Recharge Order', 'Recharge Amount', 'Original Status'
         ];
         
         const validationMap = buildValidationMap();
@@ -583,9 +631,13 @@ window.EntriesPage = (function() {
         const rows = data.map(entry => {
             const validation = findValidationForEntry(entry, validationMap);
             const status = validation?.status || 'UNKNOWN';
+            const isDay2 = validation?.isDay2 ? 'YES' : 'NO';
+            const rechargeOrder = validation?.matchedRecharge?.rechargeId || '-';
+            const rechargeAmount = validation?.matchedRecharge?.amount || '-';
             
             return [
                 status,
+                isDay2,
                 entry.timestamp,
                 entry.platform,
                 entry.gameId,
@@ -594,6 +646,8 @@ window.EntriesPage = (function() {
                 entry.drawDate,
                 entry.contest,
                 entry.ticketNumber,
+                rechargeOrder,
+                rechargeAmount,
                 entry.status
             ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
         });
@@ -708,8 +762,8 @@ window.EntriesPage = (function() {
             applyFilters();
         });
         
-        document.getElementById('filterCutoff')?.addEventListener('change', (e) => {
-            filters.cutoff = e.target.value;
+        document.getElementById('filterDay2')?.addEventListener('change', (e) => {
+            filters.day2 = e.target.value;
             applyFilters();
         });
         
