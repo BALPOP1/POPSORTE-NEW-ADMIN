@@ -53,15 +53,57 @@ window.UnifiedPage = (function() {
             return false;
         }
         
-        const regHour = entry.parsedDate.getHours();
-        const month = entry.parsedDate.getMonth();
-        const day = entry.parsedDate.getDate();
+        // Get matched recharge for this entry
+        const lookupKey = `${entry.gameId}-${entry.parsedDate.getTime()}`;
+        const bruteForceMatch = entryRechargeMap.get(lookupKey);
         
-        // Check for early cutoff days (Dec 24, Dec 31)
-        const isEarlyCutoffDay = month === 11 && (day === 24 || day === 31);
-        const cutoffHour = isEarlyCutoffDay ? 16 : 20;
+        if (!bruteForceMatch || !bruteForceMatch.recordTime) {
+            return false;
+        }
         
-        return regHour >= cutoffHour;
+        const rechargeTime = bruteForceMatch.recordTime;
+        const ticketTime = entry.parsedDate;
+        
+        // Get eligibility window to determine Day 1 and Day 2
+        const window = calculateEligibilityWindow(rechargeTime);
+        if (!window) {
+            return false;
+        }
+        
+        // Get ticket date string in Brazilian timezone for comparison
+        const ticketDateStr = AdminCore.formatBrazilDateTime(ticketTime, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        
+        // Get Day 1 and Day 2 date strings in Brazilian timezone
+        const day1DateStr = AdminCore.formatBrazilDateTime(window.day1, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const day2DateStr = AdminCore.formatBrazilDateTime(window.day2, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        
+        // Check if ticket is on Day 1 or Day 2
+        const isOnDay1 = ticketDateStr === day1DateStr;
+        const isOnDay2 = ticketDateStr === day2DateStr;
+        
+        if (isOnDay1) {
+            // Day 1: Check if ticket was created AFTER 8 PM (use Brazilian timezone)
+            const ticketHourStr = AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'});
+            const ticketHour = parseInt(ticketHourStr, 10);
+            return ticketHour >= 20; // After 8 PM on Day 1 → CUTOFF
+        } else if (isOnDay2) {
+            // Day 2: ANY ticket created on Day 2 gets CUTOFF badge
+            return true; // On Day 2 → CUTOFF
+        }
+        
+        return false;
     }
     
     // Results state
@@ -1055,22 +1097,7 @@ window.UnifiedPage = (function() {
                 status = 'VALID';
             }
             
-            // Status badge (after determining if upgraded)
-            let statusBadge = '';
-            switch (status) {
-                case 'VALID':
-                case 'VÁLIDO':
-                    statusBadge = '<span class="badge badge-success">✅ VALID</span>';
-                    break;
-                case 'INVALID':
-                case 'INVÁLIDO':
-                    statusBadge = '<span class="badge badge-danger">❌ INVALID</span>';
-                    break;
-                default:
-                    statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
-            }
-            
-            // CUTOFF BADGE: Check if ticket participates in Day 2 draw
+            // CUTOFF CHECK: Determine if ticket participates in Day 2 draw
             // Rules:
             // 1. Ticket created AFTER 8 PM on Day 1 (recharge day) → CUTOFF (participates Day 2)
             // 2. Ticket created on Day 2 (any time) → CUTOFF (participates Day 2)
@@ -1078,7 +1105,7 @@ window.UnifiedPage = (function() {
             // - rechargeTime: From "Record Time" in RECHARGE POPN1 - Sheet1 (7).csv (Column 5)
             // - ticketTime: From "DATA/HORA REGISTRO" in OLD POP SORTE - SORTE (8).csv (Column 0)
             // - CUTOFF badge means "participates in Day 2 draw" but ticket is still VALID!
-            let cutoffBadge = '';
+            let isCutoff = false;
             if (bruteForceMatch && entry.parsedDate) {
                 const rechargeTime = bruteForceMatch.recordTime; // Record Time from recharge CSV
                 const ticketTime = entry.parsedDate; // DATA/HORA REGISTRO from entries CSV
@@ -1086,40 +1113,64 @@ window.UnifiedPage = (function() {
                 // Get eligibility window to determine Day 1 and Day 2
                 const window = calculateEligibilityWindow(rechargeTime);
                 if (window) {
-                    // Get ticket date (midnight) for comparison
-                    const ticketDate = new Date(ticketTime);
-                    ticketDate.setHours(0, 0, 0, 0);
+                    // Get ticket date string in Brazilian timezone for comparison
+                    const ticketDateStr = AdminCore.formatBrazilDateTime(ticketTime, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    });
                     
-                    // Get Day 1 and Day 2 dates (midnight)
-                    const day1Date = new Date(window.day1);
-                    day1Date.setHours(0, 0, 0, 0);
-                    const day2Date = new Date(window.day2);
-                    day2Date.setHours(0, 0, 0, 0);
+                    // Get Day 1 and Day 2 date strings in Brazilian timezone
+                    const day1DateStr = AdminCore.formatBrazilDateTime(window.day1, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    });
+                    const day2DateStr = AdminCore.formatBrazilDateTime(window.day2, {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    });
                     
                     // Check if ticket is on Day 1 or Day 2
-                    const isOnDay1 = ticketDate.getTime() === day1Date.getTime();
-                    const isOnDay2 = ticketDate.getTime() === day2Date.getTime();
+                    const isOnDay1 = ticketDateStr === day1DateStr;
+                    const isOnDay2 = ticketDateStr === day2DateStr;
                     
                     if (isOnDay1) {
-                        // Day 1: Check if ticket was created AFTER 8 PM
-                        const ticketHour = ticketTime.getHours();
+                        // Day 1: Check if ticket was created AFTER 8 PM (use Brazilian timezone)
+                        const ticketHourStr = AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'});
+                        const ticketHour = parseInt(ticketHourStr, 10);
+                        
                         if (ticketHour >= 20) {
-                            cutoffBadge = ' <span class="badge badge-secondary" style="font-size: 0.65rem;">⏰ CUTOFF</span>';
+                            isCutoff = true; // After 8 PM on Day 1 → CUTOFF
                         }
                     } else if (isOnDay2) {
                         // Day 2: ANY ticket created on Day 2 gets CUTOFF badge
-                        cutoffBadge = ' <span class="badge badge-secondary" style="font-size: 0.65rem;">⏰ CUTOFF</span>';
+                        isCutoff = true; // On Day 2 → CUTOFF
                     }
                 }
             }
             
-            // Combine status and cutoff badges
-            statusBadge = statusBadge + cutoffBadge;
+            // Status badge WITH CUTOFF badge integrated
+            let statusBadge = '';
+            const cutoffBadgeHtml = isCutoff ? ' <span class="badge badge-secondary" style="font-size: 0.65rem; margin-left: 4px;">⏰ CUTOFF</span>' : '';
+            
+            switch (status) {
+                case 'VALID':
+                case 'VÁLIDO':
+                    statusBadge = `<span class="badge badge-success" data-cutoff="${isCutoff ? 'yes' : 'no'}">✅ VALID</span>${cutoffBadgeHtml}`;
+                    break;
+                case 'INVALID':
+                case 'INVÁLIDO':
+                    statusBadge = `<span class="badge badge-danger" data-cutoff="${isCutoff ? 'yes' : 'no'}">❌ INVALID</span>${cutoffBadgeHtml}`;
+                    break;
+                default:
+                    statusBadge = `<span class="badge badge-warning" data-cutoff="${isCutoff ? 'yes' : 'no'}">⏳ PENDING</span>${cutoffBadgeHtml}`;
+            }
             
             // DEBUG first few entries
             if (index < 5) {
-                const hasCutoff = cutoffBadge !== '';
-                console.log(`Entry ${index}: GameID=${entry.gameId}, CSVStatus=${entryCsvStatus}, FinalStatus=${status}, HasMatch=${!!bruteForceMatch}, WasUpgraded=${bruteForceMatch?.wasUpgraded}, HasCutoff=${hasCutoff}`);
+                console.log(`Entry ${index}: GameID=${entry.gameId}, CSVStatus=${entryCsvStatus}, FinalStatus=${status}, HasMatch=${!!bruteForceMatch}, WasUpgraded=${bruteForceMatch?.wasUpgraded}, IsCutoff=${isCutoff}`);
             }
             
             // SAFETY CHECK: Verify Game IDs match (should always be true)
@@ -1159,7 +1210,7 @@ window.UnifiedPage = (function() {
             const formattedDrawDate = formatDrawDate(entry.drawDate);
             
             return `
-                <tr>
+                <tr data-cutoff="${isCutoff ? 'yes' : 'no'}">
                     <td>${statusBadge}</td>
                     <td style="font-size:0.8rem;white-space:nowrap">${formattedTime}</td>
                     <td><span class="platform-badge ${platform.toLowerCase()}">${platform}</span></td>
