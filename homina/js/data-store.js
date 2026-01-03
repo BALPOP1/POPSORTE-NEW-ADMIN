@@ -371,8 +371,7 @@ window.DataStore = (function() {
         }
 
         // Check cutoff (20:00 BRT)
-        // Use UTC calculation to be timezone independent (BRT = UTC-3)
-        const entryHour = (entryTime.getUTCHours() - 3 + 24) % 24;
+        const entryHour = entryTime.getHours();
         const isCutoff = entryHour >= 20;
 
         // Find a valid recharge
