@@ -516,8 +516,11 @@ window.UnifiedPage = (function() {
             // RECHARGE INFO - Only show for VALID tickets using validation data
             let rechargeInfo = '-';
             
-            // Get validation status for this entry
-            if (validationResult && validationResult.matchedRecharge) {
+            // Get validation result from map
+            const validationResult = validationMap.get(entry.ticketNumber);
+            
+            // Only show recharge info for VALID tickets with matched recharge
+            if (status === 'VALID' && validationResult && validationResult.matchedRecharge) {
                 const r = validationResult.matchedRecharge;
                 const chargeAmount = r.amount || 0;
                 let amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
