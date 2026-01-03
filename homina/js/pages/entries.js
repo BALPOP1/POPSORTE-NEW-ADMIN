@@ -352,6 +352,25 @@ window.EntriesPage = (function() {
     // Table Rendering
     // ============================================
     
+    /**
+     * Format draw date from ISO (2026-01-02) to DD/MM/YYYY
+     * @param {string} drawDate - Draw date string
+     * @returns {string} Formatted date
+     */
+    function formatDrawDate(drawDate) {
+        if (!drawDate) return '-';
+        const parts = drawDate.split(/[-\/]/);
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                // ISO: YYYY-MM-DD → DD/MM/YYYY
+                return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+            // Already DD/MM/YYYY
+            return drawDate;
+        }
+        return drawDate;
+    }
+    
     function renderTable() {
         const tbody = document.getElementById('entriesTableBody');
         if (!tbody) return;
@@ -398,14 +417,15 @@ window.EntriesPage = (function() {
                 ? AdminCore.formatBrazilDateTime(entry.parsedDate, {
                     day: '2-digit',
                     month: '2-digit',
-                    year: '2-digit',
+                    year: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'
                 })
                 : entry.timestamp;
             
             let rechargeInfo = '-';
-            if (validation?.matchedRecharge) {
+            // ONLY show recharge info for VALID status
+            if (status === 'VALID' && validation?.matchedRecharge) {
                 const r = validation.matchedRecharge;
                 const day2Badge = isDay2 ? '<br><span class="badge badge-warning" style="font-size: 0.6rem; padding: 2px 4px;">⚠️ DAY 2</span>' : '';
                 const orderNumShort = r.rechargeId ? r.rechargeId.substring(0, 12) + '...' : '-';
@@ -415,6 +435,8 @@ window.EntriesPage = (function() {
                 </div>`;
             }
             
+            const formattedDrawDate = formatDrawDate(entry.drawDate);
+            
             return `
                 <tr>
                     <td>${statusBadge}</td>
@@ -423,7 +445,7 @@ window.EntriesPage = (function() {
                     <td><strong>${entry.gameId}</strong></td>
                     <td>${AdminCore.maskWhatsApp(entry.whatsapp)}</td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
-                    <td>${entry.drawDate}</td>
+                    <td>${formattedDrawDate}</td>
                     <td>${entry.contest}</td>
                     <td style="font-size: 0.75rem;">${entry.ticketNumber}</td>
                     <td>${rechargeInfo}</td>
@@ -504,11 +526,13 @@ window.EntriesPage = (function() {
         }).join('');
         
         let rechargeHtml = '<p class="text-muted">No linked recharge</p>';
-        if (validation?.matchedRecharge) {
+        // ONLY show for VALID status
+        if (validation?.status === 'VALID' && validation?.matchedRecharge) {
             const r = validation.matchedRecharge;
             const eligible1Str = r.eligible1 ? AdminCore.formatBrazilDateTime(r.eligible1, {day: '2-digit', month: '2-digit', year: 'numeric'}) : '-';
             const eligible2Str = r.eligible2 ? AdminCore.formatBrazilDateTime(r.eligible2, {day: '2-digit', month: '2-digit', year: 'numeric'}) : '-';
             const dayUsed = validation.isDay2 ? '(Used Day 2)' : '(Used Day 1)';
+            const cutoffNote = r.isCutoff ? '<span class="badge badge-warning">⚠️ After 8 PM Cutoff</span>' : '';
             
             rechargeHtml = `
                 <div class="ticket-info-grid">
@@ -522,7 +546,10 @@ window.EntriesPage = (function() {
                     </div>
                     <div class="ticket-info-item">
                         <span class="label">Recharge Time</span>
-                        <span class="value">${r.rechargeTime ? AdminCore.formatBrazilDateTime(r.rechargeTime) : '-'}</span>
+                        <span class="value">
+                            ${r.rechargeTime ? AdminCore.formatBrazilDateTime(r.rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}) : '-'}
+                            ${cutoffNote}
+                        </span>
                     </div>
                     <div class="ticket-info-item">
                         <span class="label">Eligibility Window</span>

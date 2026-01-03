@@ -436,6 +436,186 @@ window.UnifiedPage = (function() {
         renderEntriesPagination();
     }
 
+    /**
+     * Format draw date from ISO (2026-01-02) to DD/MM/YYYY
+     * @param {string} drawDate - Draw date string
+     * @returns {string} Formatted date
+     */
+    function formatDrawDate(drawDate) {
+        if (!drawDate) return '-';
+        const parts = drawDate.split(/[-\/]/);
+        if (parts.length === 3) {
+            if (parts[0].length === 4) {
+                // ISO: YYYY-MM-DD → DD/MM/YYYY
+                return `${parts[2]}/${parts[1]}/${parts[0]}`;
+            }
+            // Already DD/MM/YYYY
+            return drawDate;
+        }
+        return drawDate;
+    }
+
+    // BRUTE FORCE RECHARGE MATCHING SYSTEM
+    let boundOrderNumbers = new Set(); // Track used order numbers
+    let entryRechargeMap = new Map(); // Map ticket number to recharge info
+    let lastMatchedDataSize = 0; // Track if data changed
+    
+    /**
+     * BRUTE FORCE: Match entries to recharges by closest time
+     * Each order number can only be bound ONCE
+     */
+    function bruteForceMatchRecharges() {
+        console.log('💪 BRUTE FORCE MATCHING START');
+        
+        // Check if we need to rematch (data size changed)
+        const currentDataSize = (currentData.entries?.length || 0) + (currentData.allRecharges?.length || 0);
+        if (lastMatchedDataSize === currentDataSize && entryRechargeMap.size > 0) {
+            console.log('✅ Using cached matches (data unchanged)');
+            return;
+        }
+        lastMatchedDataSize = currentDataSize;
+        
+        boundOrderNumbers.clear();
+        entryRechargeMap.clear();
+        
+        if (!currentData.allRecharges || currentData.allRecharges.length === 0) {
+            console.log('❌ No recharges available');
+            return;
+        }
+        
+        // USE ALL ENTRIES, not just filtered ones
+        const allEntries = currentData.entries || [];
+        
+        if (allEntries.length === 0) {
+            console.log('❌ No entries available');
+            return;
+        }
+        
+        console.log(`🔍 Matching ${allEntries.length} entries against ${currentData.allRecharges.length} recharges`);
+        
+        // Sort entries by time (oldest first) for chronological binding
+        const sortedEntries = [...allEntries].sort((a, b) => {
+            const ta = a.parsedDate ? a.parsedDate.getTime() : 0;
+            const tb = b.parsedDate ? b.parsedDate.getTime() : 0;
+            return ta - tb;
+        });
+        
+        let matchCount = 0;
+        
+        for (const entry of sortedEntries) {
+            // ONLY match VALID entries
+            const csvStatus = (entry.status || '').toUpperCase();
+            if (csvStatus !== 'VALID' && csvStatus !== 'VÁLIDO') {
+                continue;
+            }
+            
+            if (!entry.parsedDate || !entry.gameId) {
+                continue;
+            }
+            
+            // Find all recharges for THIS EXACT GAME ID ONLY
+            const allGameIdRecharges = currentData.allRecharges.filter(r => r.gameId === entry.gameId);
+            
+            const userRecharges = allGameIdRecharges.filter(r => 
+                r.rechargeTime instanceof Date &&
+                !isNaN(r.rechargeTime.getTime()) &&
+                r.rechargeId && 
+                !boundOrderNumbers.has(r.rechargeId) // NOT already bound
+            );
+            
+            // DEBUG: Show filtering effect
+            if (matchCount < 3) {
+                console.log(`🔎 GameID=${entry.gameId}: Total recharges=${allGameIdRecharges.length}, Available (not bound)=${userRecharges.length}, Already bound=${allGameIdRecharges.length - userRecharges.length}`);
+            }
+            
+            if (userRecharges.length === 0) {
+                if (matchCount < 3) {
+                    console.log(`⚠️ No available recharges for GameID=${entry.gameId}, Ticket=${entry.ticketNumber} (all ${allGameIdRecharges.length} recharges already bound)`);
+                }
+                continue;
+            }
+            
+            // DEBUG: Show available recharges for first few entries
+            if (matchCount < 3) {
+                console.log(`🔎 Entry GameID=${entry.gameId}, Available recharges: ${userRecharges.length}, Bound so far: ${boundOrderNumbers.size}`);
+                if (userRecharges.length > 0) {
+                    console.log(`   First available recharge: ${userRecharges[0].rechargeId.substring(0, 20)}... (R$${userRecharges[0].amount})`);
+                }
+            }
+            
+            // Find OLDEST available recharge (FIFO: First In First Out)
+            // Recharge MUST be BEFORE ticket time
+            const ticketTime = entry.parsedDate.getTime();
+            let oldestRecharge = null;
+            let earliestTime = Infinity;
+            
+            for (const recharge of userRecharges) {
+                const rechargeTime = recharge.rechargeTime.getTime();
+                
+                // Recharge MUST be BEFORE ticket (recharge first, then ticket eligible)
+                if (rechargeTime >= ticketTime) {
+                    continue;
+                }
+                
+                // Find the OLDEST (earliest timestamp)
+                if (rechargeTime < earliestTime) {
+                    earliestTime = rechargeTime;
+                    oldestRecharge = recharge;
+                }
+            }
+            
+            // BIND IT!
+            if (oldestRecharge) {
+                const orderToAdd = oldestRecharge.rechargeId;
+                
+                // DEBUG: Verify it's not already bound
+                if (boundOrderNumbers.has(orderToAdd)) {
+                    console.error(`🚨 BUG! Trying to bind already-bound order: ${orderToAdd.substring(0, 20)}...`);
+                }
+                
+                boundOrderNumbers.add(orderToAdd);
+                
+                // DEBUG: Verify it was added
+                if (!boundOrderNumbers.has(orderToAdd)) {
+                    console.error(`🚨 BUG! Failed to add order to boundOrderNumbers: ${orderToAdd.substring(0, 20)}...`);
+                }
+                
+                // USE UNIQUE KEY: gameId + timestamp (ticket number is irrelevant!)
+                const uniqueKey = `${entry.gameId}-${entry.parsedDate.getTime()}`;
+                entryRechargeMap.set(uniqueKey, {
+                    orderNumber: orderToAdd,
+                    recordTime: oldestRecharge.rechargeTime,
+                    amount: oldestRecharge.amount,
+                    gameId: oldestRecharge.gameId // Store for verification
+                });
+                matchCount++;
+                
+                // DEBUG first 10 matches - SHOW OLDEST MATCHING
+                if (matchCount <= 10) {
+                    const rechargeTimeStr = AdminCore.formatBrazilDateTime(oldestRecharge.rechargeTime, {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+                    console.log(`✅ Match ${matchCount}: Key=${uniqueKey.substring(0, 30)}... | GameID=${entry.gameId} → OLDEST Recharge: ${rechargeTimeStr} Order=${orderToAdd.substring(0, 15)}... (R$${oldestRecharge.amount}) | BoundSize=${boundOrderNumbers.size}`);
+                }
+            }
+        }
+        
+        console.log(`✅ BRUTE FORCE MATCHED: ${matchCount} tickets bound to recharges`);
+        console.log(`📊 Bound order numbers: ${boundOrderNumbers.size}`);
+        console.log(`📋 Entry-Recharge map size: ${entryRechargeMap.size}`);
+        
+        // DETAILED DEBUG: Show first 10 unique order numbers
+        const orderArray = Array.from(boundOrderNumbers).slice(0, 10);
+        console.log(`🔍 First 10 bound orders:`, orderArray.map(o => o.substring(0, 20) + '...'));
+        
+        // DETAILED DEBUG: Show first 10 entry mappings
+        const mappingArray = Array.from(entryRechargeMap.entries()).slice(0, 10);
+        console.log(`🔍 First 10 entry mappings:`, mappingArray.map(([key, data]) => ({
+            key: key.substring(0, 30) + '...',
+            order: data.orderNumber.substring(0, 20) + '...',
+            gameId: data.gameId,
+            amount: data.amount
+        })));
+    }
+
     function renderEntriesTable() {
         const tbody = document.getElementById('entriesTableBody');
         if (!tbody) {
@@ -443,15 +623,8 @@ window.UnifiedPage = (function() {
             return;
         }
         
-        console.log('🔍 RECHARGE DATA CHECK:');
-        console.log('   Total allRecharges:', currentData.allRecharges?.length || 0);
-        if (currentData.allRecharges && currentData.allRecharges.length > 0) {
-            console.log('   First recharge:', currentData.allRecharges[0]);
-            console.log('   First 3 gameIds:', currentData.allRecharges.slice(0, 3).map(r => r.gameId));
-        }
-        if (filteredEntries.length > 0) {
-            console.log('   First entry gameId:', filteredEntries[0].gameId);
-        }
+        // DON'T call bruteForceMatchRecharges here - it clears the bindings!
+        // It should only be called once when data is loaded
         
         const start = (entriesPage - 1) * entriesPerPage;
         const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
@@ -469,18 +642,7 @@ window.UnifiedPage = (function() {
             const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
             const status = csvStatus;
             
-            // Check for CUTOFF (registered after 20:00 BRT)
-            const isCutoff = isEntryCutoff(entry);
-            
-            // Debug ONLY first entry to avoid performance issues
-            if (index === 0) {
-                console.log('🎯 FIRST ENTRY:', entry.gameId, entry.ticketNumber);
-                console.log('   CSV Status:', entry.status);
-                console.log('   Parsed Status:', status);
-                console.log('   Is Cutoff:', isCutoff);
-            }
-            
-            // Status badge based on CSV column + CUTOFF indicator
+            // Status badge based on CSV column ONLY
             let statusBadge = '';
             switch (status) {
                 case 'VALID':
@@ -495,14 +657,9 @@ window.UnifiedPage = (function() {
                     statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
             }
             
-            // Add CUTOFF badge if applicable
-            if (isCutoff) {
-                statusBadge += ' <span class="badge badge-warning" style="margin-left:4px; font-size:0.75rem">⚠️ CUTOFF</span>';
-            }
-            
-            // Format date/time
+            // Format date/time with FULL YEAR
             const formattedTime = entry.parsedDate
-                ? AdminCore.formatBrazilDateTime(entry.parsedDate, { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+                ? AdminCore.formatBrazilDateTime(entry.parsedDate, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                 : entry.timestamp;
             
             // Render number badges
@@ -513,70 +670,51 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // RECHARGE INFO - DIRECT MATCH BY GAME ID
-            let rechargeInfo = '<span class="text-muted" style="font-size:0.85rem">No recharge found</span>';
+            // RECHARGE INFO - BRUTE FORCE MATCHING
+            let rechargeInfo = '-';
             
-            try {
-                // Find recharge directly by matching gameId
-                const entryGameId = entry.gameId;
+            // DOUBLE CHECK: ONLY show for VALID status
+            const entryCsvStatus = (entry.status || '').toUpperCase();
+            const isValidEntry = (entryCsvStatus === 'VALID' || entryCsvStatus === 'VÁLIDO');
+            
+            // Get brute force matched recharge using UNIQUE KEY: gameId + timestamp
+            const lookupKey = `${entry.gameId}-${entry.parsedDate ? entry.parsedDate.getTime() : 0}`;
+            const bruteForceMatch = entryRechargeMap.get(lookupKey);
+            
+            // DEBUG first few entries
+            if (index < 5) {
+                console.log(`Entry ${index}: GameID=${entry.gameId}, LookupKey=${lookupKey}, Status=${entryCsvStatus}, HasMatch=${!!bruteForceMatch}, MatchGameID=${bruteForceMatch?.gameId}, IsValid=${isValidEntry}`);
+            }
+            
+            // SAFETY CHECK: Verify Game IDs match (should always be true)
+            if (bruteForceMatch && bruteForceMatch.gameId !== entry.gameId) {
+                console.error(`❌ GAME ID MISMATCH! Entry=${entry.gameId}, Recharge=${bruteForceMatch.gameId}`);
+            }
+            
+            if (isValidEntry && bruteForceMatch) {
+                const orderNumShort = bruteForceMatch.orderNumber.length > 12 
+                    ? bruteForceMatch.orderNumber.substring(0, 12) + '...' 
+                    : bruteForceMatch.orderNumber;
                 
-                if (entryGameId && currentData.allRecharges && currentData.allRecharges.length > 0) {
-                    // Find ALL recharges for this game ID
-                    const userRecharges = currentData.allRecharges.filter(r => r.gameId === entryGameId);
-                    
-                    if (userRecharges.length > 0) {
-                        // Get the most recent recharge (recharges are sorted by time descending)
-                        const r = userRecharges[0];
-                        
-                        // ORDER NUMBER from CSV (Column 1)
-                        const orderNumber = r.rechargeId || '';
-                        const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
-                        
-                        // CHARGE AMOUNT from CSV (Column 8)
-                        const chargeAmount = r.amount || 0;
-                        const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
-                        
-                        // TIME from CSV (Column 5)
-                        let timeDisplay = '-';
-                        if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
-                            timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
-                                day: '2-digit', 
-                                month: '2-digit', 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                            });
-                        } else if (r.rechargeTimeRaw) {
-                            timeDisplay = r.rechargeTimeRaw;
-                        }
-                        
-                        rechargeInfo = `
-                            <div class="recharge-details">
-                                <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
-                                <div class="recharge-time">${timeDisplay}</div>
-                                <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
-                            </div>
-                        `;
-                        
-                        // Debug first entry with recharge
-                        if (index === 0 && userRecharges.length > 0) {
-                            console.log('💰 RECHARGE FOUND FOR FIRST ENTRY:');
-                            console.log('   Game ID:', entryGameId);
-                            console.log('   Order#:', orderNumber);
-                            console.log('   Amount:', chargeAmount);
-                            console.log('   Time:', timeDisplay);
-                            console.log('   Total recharges for this user:', userRecharges.length);
-                        }
-                    } else if (index === 0) {
-                        console.log('❌ NO RECHARGE for gameId:', entryGameId);
-                    }
-                }
-            } catch (error) {
-                console.error('❌ ERROR getting recharge info:', error);
-                rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">Error loading recharge</span>';
+                const timeStr = AdminCore.formatBrazilDateTime(bruteForceMatch.recordTime, {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                rechargeInfo = `<div style="font-size: 0.7rem; line-height: 1.3;">
+                    <strong class="text-success">R$ ${bruteForceMatch.amount.toFixed(2)}</strong><br>
+                    <span style="color: var(--text-tertiary);" title="${bruteForceMatch.orderNumber}">${orderNumShort}</span><br>
+                    <span style="color: var(--text-muted); font-size: 0.65rem;">${timeStr}</span>
+                </div>`;
             }
             
             // WhatsApp masked display
             const whatsappDisplay = AdminCore.maskWhatsApp(entry.whatsapp);
+            
+            // Format draw date
+            const formattedDrawDate = formatDrawDate(entry.drawDate);
             
             return `
                 <tr>
@@ -586,7 +724,7 @@ window.UnifiedPage = (function() {
                     <td><strong>${entry.gameId}</strong></td>
                     <td style="font-size:0.75rem">${whatsappDisplay}</td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
-                    <td style="font-size:0.8rem">${entry.drawDate || '-'}</td>
+                    <td style="font-size:0.8rem">${formattedDrawDate}</td>
                     <td><span class="badge badge-info">${entry.contest}</span></td>
                     <td style="font-size:0.9rem">${entry.ticketNumber}</td>
                     <td>${rechargeInfo}</td>
@@ -639,17 +777,14 @@ window.UnifiedPage = (function() {
         // ✅ VALIDATION STATUS - READ DIRECTLY FROM CSV (Column H - STATUS)
         const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
         const status = csvStatus;
-        const isCutoff = isEntryCutoff(entry);
         const statusClass = { 'VALID': 'success', 'INVALID': 'danger', 'VÁLIDO': 'success', 'INVÁLIDO': 'danger' }[csvStatus] || 'warning';
         const statusIcon = (status === 'VALID' || status === 'VÁLIDO') ? '✅' : (status === 'INVALID' || status === 'INVÁLIDO') ? '❌' : '⏳';
         const statusText = (status === 'VALID' || status === 'VÁLIDO') ? 'VALID' : (status === 'INVALID' || status === 'INVÁLIDO') ? 'INVALID' : 'PENDING';
         
-        const cutoffWarning = isCutoff ? '<br><span class="text-warning">⚠️ Registered after cutoff time (20:00 BRT)</span>' : '';
-        
         const statusHtml = `<div class="status-banner ${statusClass} mb-4">
             <span class="status-banner-icon">${statusIcon}</span>
             <span class="status-banner-text">
-                <strong>${statusText}</strong> - Status from CSV${cutoffWarning}
+                <strong>${statusText}</strong> - Status from CSV
             </span>
         </div>`;
         
@@ -1100,6 +1235,9 @@ window.UnifiedPage = (function() {
                     rechargeAmount: v.matchedRecharge?.amount
                 })));
             }
+            
+            // BRUTE FORCE: Match recharges ONCE when data is loaded
+            bruteForceMatchRecharges();
             
             // Render all sections
             renderDashboard();

@@ -116,41 +116,61 @@ window.RechargeValidator = (function() {
     }
 
     /**
-     * Calculate eligibility window for a recharge
+     * Calculate eligibility window for a recharge with proper cutoff logic
      * @param {Date} rechargeTime - When the recharge occurred
-     * @returns {Object|null} {eligible1: Date, eligible2: Date, expiresAt: Date} or null if invalid
+     * @returns {Object|null} {eligible1: Date, eligible2: Date, expiresAt: Date, isCutoff: boolean}
      */
     function calculateEligibilityWindow(rechargeTime) {
-        // Validate rechargeTime is a proper Date object
         if (!rechargeTime || !(rechargeTime instanceof Date) || isNaN(rechargeTime.getTime())) {
             return null;
         }
         
+        // Determine if recharge was after 8 PM cutoff
+        const rechargeHour = rechargeTime.getHours();
+        const isCutoff = rechargeHour >= 20; // After 8 PM (20:00)
+        
+        // Get recharge calendar date
         const rechargeDateStr = AdminCore.getBrazilDateString(rechargeTime);
         if (!rechargeDateStr) return null;
         
-        // eligible1 = recharge date (same calendar day)
-        const eligible1 = new Date(`${rechargeDateStr}T00:00:00-03:00`);
+        const rechargeDate = new Date(`${rechargeDateStr}T00:00:00-03:00`);
         
-        // If eligible1 is a no-draw day, extend to next valid draw day
-        const finalEligible1 = isNoDrawDay(eligible1) ? getNextValidDrawDate(eligible1) : eligible1;
+        // Calculate Day 1 and Day 2 based on cutoff
+        let day1, day2;
         
-        // eligible2 = next calendar day after eligible1
-        const eligible2Temp = new Date(finalEligible1);
-        eligible2Temp.setDate(eligible2Temp.getDate() + 1);
+        if (isCutoff) {
+            // After 8 PM: Day 1 = NEXT DAY, Day 2 = DAY AFTER NEXT
+            day1 = new Date(rechargeDate);
+            day1.setDate(day1.getDate() + 1);
+            
+            day2 = new Date(day1);
+            day2.setDate(day2.getDate() + 1);
+        } else {
+            // Before 8 PM: Day 1 = SAME DAY, Day 2 = NEXT DAY
+            day1 = new Date(rechargeDate);
+            
+            day2 = new Date(day1);
+            day2.setDate(day2.getDate() + 1);
+        }
         
-        // If eligible2 is a no-draw day, extend to next valid draw day
-        const finalEligible2 = isNoDrawDay(eligible2Temp) ? getNextValidDrawDate(eligible2Temp) : eligible2Temp;
+        // Skip holidays/Sundays for Day 1
+        const finalDay1 = isNoDrawDay(day1) ? getNextValidDrawDate(day1) : day1;
         
-        // Window expires at cutoff hour on eligible2
-        const cutoffHour = getCutoffHour(finalEligible2);
-        const expiresAt = new Date(finalEligible2);
-        expiresAt.setHours(cutoffHour, 0, 0, 0);
+        // Skip holidays/Sundays for Day 2
+        const tempDay2 = new Date(finalDay1);
+        tempDay2.setDate(tempDay2.getDate() + 1);
+        const finalDay2 = isNoDrawDay(tempDay2) ? getNextValidDrawDate(tempDay2) : tempDay2;
+        
+        // Window expires at 8 PM on Day 2
+        const expiresAt = new Date(finalDay2);
+        expiresAt.setHours(20, 0, 0, 0);
         
         return {
-            eligible1: finalEligible1,
-            eligible2: finalEligible2,
-            expiresAt: expiresAt
+            eligible1: finalDay1,
+            eligible2: finalDay2,
+            expiresAt: expiresAt,
+            isCutoff: isCutoff,
+            rechargeTime: rechargeTime
         };
     }
 
@@ -191,14 +211,14 @@ window.RechargeValidator = (function() {
     // ============================================
     
     /**
-     * Find the best matching recharge for a ticket
+     * Find matching recharge for a ticket with strict one-recharge-one-ticket binding
      * @param {Object} ticket - Ticket entry object
      * @param {Object[]} recharges - All recharges for this game ID (sorted chronologically)
      * @param {Object[]} allTickets - All tickets for this game ID (sorted chronologically)
-     * @returns {Object|null} Matching recharge with eligibility window info, or null
+     * @returns {Object|null} Matched recharge with eligibility info, or null
      */
     function findMatchingRecharge(ticket, recharges, allTickets) {
-        // Validate ticket.parsedDate is a proper Date object
+        // Validate inputs
         if (!ticket.parsedDate || !(ticket.parsedDate instanceof Date) || isNaN(ticket.parsedDate.getTime())) {
             return null;
         }
@@ -211,7 +231,9 @@ window.RechargeValidator = (function() {
         
         // Filter recharges created BEFORE ticket
         const eligibleRecharges = recharges.filter(r => {
-            if (!r.rechargeTime || !(r.rechargeTime instanceof Date) || isNaN(r.rechargeTime.getTime())) return false;
+            if (!r.rechargeTime || !(r.rechargeTime instanceof Date) || isNaN(r.rechargeTime.getTime())) {
+                return false;
+            }
             return r.rechargeTime.getTime() < ticketTime.getTime();
         });
         
@@ -219,60 +241,66 @@ window.RechargeValidator = (function() {
             return null;
         }
         
-        // Sort by time chronologically (oldest first for consumption order)
+        // Sort chronologically (oldest first - FIFO consumption)
         eligibleRecharges.sort((a, b) => a.rechargeTime.getTime() - b.rechargeTime.getTime());
         
-        // For each recharge, check if it matches this ticket
+        // Try each recharge in order
         for (const recharge of eligibleRecharges) {
-            // Calculate eligibility window for this recharge
+            // Calculate eligibility window
             const window = calculateEligibilityWindow(recharge.rechargeTime);
             if (!window) continue;
             
-            // Check 1: Is ticket within the eligibility window? (by 20:00 on eligible2)
-            if (!isTicketInWindow(ticketTime, window.expiresAt)) {
+            // Check 1: Is ticket within the eligibility window?
+            if (ticketTime.getTime() >= window.expiresAt.getTime()) {
                 continue; // Ticket created after window expired
             }
             
-            // Check 2: Does ticket's CSV drawDate match eligible1 or eligible2?
-            const eligible1Str = AdminCore.getBrazilDateString(window.eligible1);
-            const eligible2Str = AdminCore.getBrazilDateString(window.eligible2);
+            // Check 2: Does ticket's drawDate match Day 1 or Day 2?
+            const day1Str = AdminCore.getBrazilDateString(window.eligible1);
+            const day2Str = AdminCore.getBrazilDateString(window.eligible2);
             
-            let matchesEligible1 = ticketDrawDateStr === eligible1Str;
-            let matchesEligible2 = ticketDrawDateStr === eligible2Str;
+            const matchesDay1 = ticketDrawDateStr === day1Str;
+            const matchesDay2 = ticketDrawDateStr === day2Str;
             
-            if (!matchesEligible1 && !matchesEligible2) {
-                continue; // Draw date doesn't match either eligible day
+            if (!matchesDay1 && !matchesDay2) {
+                continue; // Draw date doesn't match eligibility
             }
             
             // Check 3: Is this recharge already consumed by a prior ticket?
-            const rechargeAlreadyUsed = allTickets.some(t => {
-                if (t.ticketNumber === ticket.ticketNumber) return false; // Skip self
-                if (!t.parsedDate || !(t.parsedDate instanceof Date) || isNaN(t.parsedDate.getTime())) return false;
+            const rechargeConsumed = allTickets.some(priorTicket => {
+                // Skip self
+                if (priorTicket.ticketNumber === ticket.ticketNumber) return false;
                 
-                // Only check tickets between recharge and current ticket
-                const tTime = t.parsedDate.getTime();
-                if (tTime <= recharge.rechargeTime.getTime()) return false;
-                if (tTime >= ticketTime.getTime()) return false;
+                // Skip tickets without valid date
+                if (!priorTicket.parsedDate || !(priorTicket.parsedDate instanceof Date)) return false;
                 
-                // Check if prior ticket used this recharge
-                const priorDrawDateStr = normalizeDrawDate(t.drawDate);
-                return (priorDrawDateStr === eligible1Str || priorDrawDateStr === eligible2Str);
+                const priorTime = priorTicket.parsedDate.getTime();
+                
+                // Only check tickets created BETWEEN recharge and current ticket
+                if (priorTime <= recharge.rechargeTime.getTime()) return false;
+                if (priorTime >= ticketTime.getTime()) return false;
+                
+                // Check if prior ticket's drawDate matches this recharge's eligibility
+                const priorDrawDateStr = normalizeDrawDate(priorTicket.drawDate);
+                return (priorDrawDateStr === day1Str || priorDrawDateStr === day2Str);
             });
             
-            if (rechargeAlreadyUsed) {
-                continue; // This recharge was already consumed
+            if (rechargeConsumed) {
+                continue; // This recharge was already bound to an earlier ticket
             }
             
-            // Found a match! Return recharge with window info
+            // ✅ MATCH FOUND! Bind this recharge to this ticket
             return {
                 ...recharge,
                 eligible1: window.eligible1,
                 eligible2: window.eligible2,
                 expiresAt: window.expiresAt,
-                isDay2: matchesEligible2
+                isDay2: matchesDay2,
+                isCutoff: window.isCutoff
             };
         }
         
+        // No valid match found
         return null;
     }
 
