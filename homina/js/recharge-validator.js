@@ -1,74 +1,17 @@
 /**
  * POP-SORTE Admin Dashboard - Recharge Validator Module
  * 
- * This module handles ticket validation against recharge data using the admin's validation logic.
+ * This module handles ticket validation against recharge data.
  * 
- * Validation Rules (Rule B - Merged Windows):
+ * Validation Rules:
  * 1. Ticket must be created AFTER recharge timestamp
- * 2. Ticket matches to first unconsumed recharge in its eligible window
+ * 2. Ticket must fall within eligible draw windows (same day or next draw day)
  * 3. Each recharge can only be used once (first ticket after recharge)
  * 4. Cutoff time: 20:00 BRT (16:00 on Dec 24/31)
  * 5. No draws on Sundays and holidays (Dec 25, Jan 1)
  * 
- * Dependencies: None (standalone module)
+ * Dependencies: admin-core.js (AdminCore), data-fetcher.js (DataFetcher)
  */
-
-// ============================================
-// BRT Timezone Helpers
-// ============================================
-
-const BRT_OFFSET_HOURS = 3;
-const BRT_OFFSET_MS = BRT_OFFSET_HOURS * 60 * 60 * 1000;
-
-/**
- * Get BRT calendar fields from a Date object
- * @param {Date} date - Date object
- * @returns {Object} BRT calendar fields
- */
-function brtFields(date) {
-    const shifted = new Date(date.getTime() - BRT_OFFSET_MS);
-    return {
-        year: shifted.getUTCFullYear(),
-        month: shifted.getUTCMonth(), // 0-based
-        day: shifted.getUTCDate(),
-        weekday: shifted.getUTCDay(), // 0=Sunday
-    };
-}
-
-/**
- * Create a Date object from BRT wall time
- * @param {number} year - Year
- * @param {number} month - Month (0-based)
- * @param {number} day - Day
- * @param {number} hour - Hour
- * @param {number} minute - Minute
- * @param {number} second - Second
- * @returns {Date} Date object
- */
-function makeDateFromBrt(year, month, day, hour = 0, minute = 0, second = 0) {
-    return new Date(Date.UTC(year, month, day, hour + BRT_OFFSET_HOURS, minute, second));
-}
-
-/**
- * Get start of day in BRT
- * @param {Date} date - Date object
- * @returns {Date} Start of day
- */
-function startOfDayBrt(date) {
-    const f = brtFields(date);
-    return makeDateFromBrt(f.year, f.month, f.day, 0, 0, 0);
-}
-
-/**
- * Add days to a BRT date
- * @param {Date} date - Date object
- * @param {number} n - Number of days to add
- * @returns {Date} New date
- */
-function addDaysBrt(date, n) {
-    const start = startOfDayBrt(date);
-    return new Date(start.getTime() + n * 24 * 60 * 60 * 1000);
-}
 
 // ============================================
 // Recharge Validator Module
@@ -80,404 +23,643 @@ window.RechargeValidator = (function() {
     // Constants
     // ============================================
     
+    /**
+     * Default cutoff hour for same-day draws (20:00 BRT)
+     */
+    const DEFAULT_CUTOFF_HOUR = 20;
+    
+    /**
+     * Early cutoff hour for special days (Dec 24, Dec 31)
+     */
+    const EARLY_CUTOFF_HOUR = 16;
+    
+    /**
+     * Validation result statuses
+     */
     const ValidationStatus = {
         VALID: 'VALID',
         INVALID: 'INVALID',
-        UNKNOWN: 'UNKNOWN'
+        UNKNOWN: 'UNKNOWN',
+        CUTOFF: 'CUTOFF'
     };
 
-    // No-draw holidays (extend as needed)
-    const NO_DRAW_HOLIDAYS = [
-        '12-25', // Dec 25
-        '01-01'  // Jan 1
-    ];
-
     // ============================================
-    // Draw / Cutoff Helpers
+    // Draw Calendar Helpers
     // ============================================
-
+    
     /**
-     * Check if a date is a no-draw day
-     * @param {Date} dateObj - Date object
-     * @returns {boolean} True if no draw
+     * Check if a date is a no-draw day (Sunday, Dec 25, Jan 1)
+     * @param {Date} date - Date to check
+     * @returns {boolean} True if no draw on this day
      */
-    function isNoDrawDay(dateObj) {
-        const f = brtFields(dateObj);
-        if (f.weekday === 0) return true; // Sunday
-        const m = String(f.month + 1).padStart(2, '0');
-        const d = String(f.day).padStart(2, '0');
-        const key = `${m}-${d}`;
-        if (NO_DRAW_HOLIDAYS.includes(key)) return true;
+    function isNoDrawDay(date) {
+        const month = date.getMonth(); // 0-indexed
+        const day = date.getDate();
+        const dayOfWeek = date.getDay();
+        
+        // Sunday
+        if (dayOfWeek === 0) return true;
+        
+        // Christmas (Dec 25)
+        if (month === 11 && day === 25) return true;
+        
+        // New Year (Jan 1)
+        if (month === 0 && day === 1) return true;
+        
         return false;
     }
 
     /**
-     * Get cutoff time for a date
-     * @param {Date} dateObj - Date object
-     * @returns {Object} Cutoff time {hour, minute, second}
+     * Check if a date has early cutoff (Dec 24, Dec 31)
+     * @param {Date} date - Date to check
+     * @returns {boolean} True if early cutoff applies
      */
-    function getCutoffTime(dateObj) {
-        const f = brtFields(dateObj);
-        const m = f.month + 1;
-        const d = f.day;
-        if ((m === 12 && d === 24) || (m === 12 && d === 31)) {
-            return { hour: 16, minute: 0, second: 0 };
-        }
-        return { hour: 20, minute: 0, second: 0 };
+    function isEarlyCutoffDay(date) {
+        const month = date.getMonth();
+        const day = date.getDate();
+        
+        // Dec 24 or Dec 31
+        return month === 11 && (day === 24 || day === 31);
     }
 
     /**
-     * Build cutoff datetime for a date
-     * @param {Date} dateObj - Date object
-     * @returns {Date} Cutoff datetime
+     * Get cutoff hour for a specific date
+     * @param {Date} date - Date to check
+     * @returns {number} Cutoff hour (16 or 20)
      */
-    function buildCutoffDateTime(dateObj) {
-        const f = brtFields(dateObj);
-        const { hour, minute, second } = getCutoffTime(dateObj);
-        return makeDateFromBrt(f.year, f.month, f.day, hour, minute, second);
+    function getCutoffHour(date) {
+        return isEarlyCutoffDay(date) ? EARLY_CUTOFF_HOUR : DEFAULT_CUTOFF_HOUR;
     }
 
     /**
-     * Find the first draw day whose cutoff is > given time
-     * @param {Date} timeObj - Time object
-     * @returns {Date|null} First draw day
+     * Get next valid draw date from a given date
+     * @param {Date} fromDate - Starting date
+     * @returns {Date} Next valid draw date
      */
-    function firstDrawDayAfter(timeObj) {
-        let probe = startOfDayBrt(timeObj);
-        for (let i = 0; i < 60; i++) {
+    function getNextValidDrawDate(fromDate) {
+        const probe = new Date(fromDate);
+        probe.setHours(0, 0, 0, 0);
+        
+        // Check up to 14 days ahead
+        for (let i = 0; i < 14; i++) {
+            if (i > 0) {
+                probe.setDate(probe.getDate() + 1);
+            }
+            
             if (!isNoDrawDay(probe)) {
-                const cutoff = buildCutoffDateTime(probe);
-                if (cutoff > timeObj) {
-                    return startOfDayBrt(probe);
-                }
+                return new Date(probe);
             }
-            probe = addDaysBrt(probe, 1);
         }
-        return null;
+        
+        throw new Error('No valid draw date found in range');
     }
 
     /**
-     * Find the draw day for a ticket time (Rule B)
-     * @param {Date} ticketTime - Ticket timestamp
-     * @returns {Object|null} {day, cutoff} or null
+     * Get the eligible draw date for a ticket based on registration time
+     * @param {Date} registrationTime - When the ticket was registered
+     * @returns {Date|null} The draw date this ticket is eligible for, or null if invalid
      */
-    function ticketDrawDay(ticketTime) {
-        let probe = startOfDayBrt(ticketTime);
-        for (let i = 0; i < 60; i++) {
-            if (!isNoDrawDay(probe)) {
-                const cutoff = buildCutoffDateTime(probe);
-                if (cutoff >= ticketTime) {
-                    return {
-                        day: startOfDayBrt(probe),
-                        cutoff
-                    };
-                }
-            }
-            probe = addDaysBrt(probe, 1);
-        }
-        return null;
-    }
-
-    /**
-     * Compute eligible draw windows for a recharge
-     * @param {Date} rechargeTimeObj - Recharge timestamp
-     * @returns {Object|null} {eligible1, eligible2} or null
-     */
-    function computeEligibleDraws(rechargeTimeObj) {
-        if (!rechargeTimeObj) return null;
-
-        // Eligible 1: recharge day (if no-draw, advance to next draw day)
-        let eligible1Day = startOfDayBrt(rechargeTimeObj);
-        for (let i = 0; i < 60 && isNoDrawDay(eligible1Day); i++) {
-            eligible1Day = addDaysBrt(eligible1Day, 1);
-        }
-        const eligible1Cutoff = buildCutoffDateTime(eligible1Day);
-
-        // Eligible 2: next draw day after eligible1 (skip no-draw)
-        let eligible2Day = addDaysBrt(eligible1Day, 1);
-        for (let i = 0; i < 60 && isNoDrawDay(eligible2Day); i++) {
-            eligible2Day = addDaysBrt(eligible2Day, 1);
-        }
-        const eligible2Cutoff = buildCutoffDateTime(eligible2Day);
-
-        return {
-            eligible1: { day: eligible1Day, cutoff: eligible1Cutoff },
-            eligible2: { day: eligible2Day, cutoff: eligible2Cutoff }
-        };
-    }
-
-    // ============================================
-    // Time Parsing
-    // ============================================
-
-    /**
-     * Parse Brazil time string to Date object
-     * @param {string} timeString - Time string (dd/mm/yyyy HH:MM:SS)
-     * @returns {Date|null} Date object or null
-     */
-    function parseBrazilTime(timeString) {
-        try {
-            if (!timeString || typeof timeString !== 'string') return null;
-
-            // If the string already has an explicit timezone, trust it
-            if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(timeString.trim())) {
-                const dateObj = new Date(timeString);
-                return isNaN(dateObj.getTime()) ? null : dateObj;
-            }
-
-            // Expected format: dd/mm/yyyy HH:MM(:SS)?
-            const [datePart, timePartRaw = '00:00:00'] = timeString.split(' ');
-            const [d, m, y] = datePart.split('/').map(v => parseInt(v, 10));
-            if (![d, m, y].every(Number.isFinite)) return null;
-
-            const [hh = 0, mm = 0, ss = 0] = timePartRaw.split(':').map(v => parseInt(v, 10));
-            return makeDateFromBrt(y, m - 1, d, hh, mm, ss);
-        } catch {
+    function getEligibleDrawDate(registrationTime) {
+        // Validate registrationTime is a proper Date object
+        if (!registrationTime || !(registrationTime instanceof Date) || isNaN(registrationTime.getTime())) {
             return null;
         }
-    }
-
-    /**
-     * Parse ticket time string to Date object
-     * @param {string} timeString - Time string
-     * @returns {Date|null} Date object or null
-     */
-    function parseTicketTime(timeString) {
-        return parseBrazilTime(timeString); // Same logic
-    }
-
-    // ============================================
-    // Core Validation Logic (Rule B)
-    // ============================================
-
-    /**
-     * Validate entries against recharge data
-     * @param {Array} entries - Array of entry objects
-     * @param {Array} recharges - Array of recharge objects
-     * @returns {Array} Validated entries with validity status
-     */
-    function validateEntries(entries, recharges) {
-        if (!recharges || recharges.length === 0) {
-            console.warn('No recharge data loaded. All tickets marked as UNKNOWN.');
-            return entries.map(entry => ({
-                ...entry,
-                validity: 'UNKNOWN',
-                invalidReasonCode: 'NO_RECHARGE_DATA',
-                boundRechargeId: null,
-                boundRechargeTime: null,
-                boundRechargeAmount: null,
-                cutoffFlag: false
-            }));
+        
+        const regDateStr = AdminCore.getBrazilDateString(registrationTime);
+        if (!regDateStr) return null;
+        
+        const regDate = new Date(`${regDateStr}T00:00:00-03:00`);
+        
+        // Get registration hour in BRT
+        const regHour = registrationTime.getHours();
+        const cutoffHour = getCutoffHour(regDate);
+        
+        if (!isNoDrawDay(regDate) && regHour < cutoffHour) {
+            // Before cutoff on a valid draw day - same day draw
+            return regDate;
+        } else {
+            // After cutoff or on a no-draw day - next valid draw
+            const nextDay = new Date(regDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            return getNextValidDrawDate(nextDay);
         }
+    }
 
-        // Group recharges by user and sort by time
+    // ============================================
+    // Recharge Matching
+    // ============================================
+    
+    /**
+     * Find the best matching recharge for a ticket
+     * @param {Object} ticket - Ticket entry object
+     * @param {Object[]} recharges - All recharges for this game ID
+     * @param {Object[]} allTickets - All tickets for this game ID (to check usage)
+     * @returns {Object|null} Matching recharge or null
+     */
+    function findMatchingRecharge(ticket, recharges, allTickets) {
+        // Validate ticket.parsedDate is a proper Date object
+        if (!ticket.parsedDate || !(ticket.parsedDate instanceof Date) || isNaN(ticket.parsedDate.getTime())) {
+            return null;
+        }
+        if (!recharges || recharges.length === 0) {
+            return null;
+        }
+        
+        const ticketTime = ticket.parsedDate.getTime();
+        const ticketDrawDate = ticket.drawDate;
+        
+        // Filter recharges that could potentially match
+        // Recharge must be before ticket creation and have valid rechargeTime
+        const eligibleRecharges = recharges.filter(r => {
+            if (!r.rechargeTime || !(r.rechargeTime instanceof Date) || isNaN(r.rechargeTime.getTime())) return false;
+            return r.rechargeTime.getTime() < ticketTime;
+        });
+        
+        if (eligibleRecharges.length === 0) {
+            return null;
+        }
+        
+        // Sort by time descending (most recent first)
+        eligibleRecharges.sort((a, b) => b.rechargeTime.getTime() - a.rechargeTime.getTime());
+        
+        // HARDCORE DEBUG: First ticket matching
+        const isFirstTicket = ticket.ticketNumber && ticket.ticketNumber.includes('1°');
+        if (isFirstTicket && eligibleRecharges.length > 0) {
+            console.log('===== MATCHING FIRST TICKET =====');
+            console.log('Eligible recharges:', eligibleRecharges.length);
+            console.log('Ticket draw date:', ticketDrawDate);
+        }
+        
+        // For each recharge, check if it's already used by another ticket
+        for (const recharge of eligibleRecharges) {
+            // Get eligible draw date for this recharge
+            const eligibleDraw = getEligibleDrawDate(recharge.rechargeTime);
+            if (!eligibleDraw) continue; // Skip if can't determine eligible draw
+            
+            const eligibleDrawStr = AdminCore.getBrazilDateString(eligibleDraw);
+            if (!eligibleDrawStr) continue;
+            
+            // Check if ticket's draw date matches eligible draw
+            // Parse ticket draw date (could be in various formats)
+            let ticketDrawStr = '';
+            if (ticketDrawDate) {
+                // Try to normalize the format
+                const parts = ticketDrawDate.split(/[\/\-]/);
+                if (parts.length === 3) {
+                    if (parts[0].length === 4) {
+                        // YYYY-MM-DD
+                        ticketDrawStr = ticketDrawDate;
+                    } else {
+                        // DD/MM/YYYY
+                        ticketDrawStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                    }
+                }
+            }
+            
+            // HARDCORE DEBUG: First ticket draw date comparison
+            if (isFirstTicket) {
+                console.log('Comparing draw dates:', {
+                    ticketDrawStr: ticketDrawStr,
+                    eligibleDrawStr: eligibleDrawStr,
+                    matches: ticketDrawStr === eligibleDrawStr,
+                    rechargeTime: recharge.rechargeTime,
+                    ticketTime: ticket.parsedDate
+                });
+            }
+            
+            // Check if draw dates match
+            if (ticketDrawStr !== eligibleDrawStr) {
+                if (isFirstTicket) console.log('DRAW DATE MISMATCH - skipping this recharge');
+                continue;
+            }
+            
+            if (isFirstTicket) console.log('DRAW DATE MATCH! Checking if recharge already used...');
+            
+            // Check if this recharge is already used by a prior ticket
+            const priorTickets = allTickets.filter(t => 
+                t.ticketNumber !== ticket.ticketNumber &&
+                t.parsedDate &&
+                t.parsedDate instanceof Date &&
+                !isNaN(t.parsedDate.getTime()) &&
+                t.parsedDate.getTime() < ticketTime &&
+                t.parsedDate.getTime() > recharge.rechargeTime.getTime()
+            );
+            
+            // If no prior tickets used this recharge, it's available
+            if (priorTickets.length === 0) {
+                if (isFirstTicket) console.log('✅ MATCH FOUND! No prior tickets used this recharge');
+                if (isFirstTicket) console.log('====================================');
+                return recharge;
+            }
+            
+            if (isFirstTicket) console.log(`Found ${priorTickets.length} prior tickets, checking if recharge already used...`);
+            
+            // Check if any prior ticket already claimed this recharge
+            let rechargeUsed = false;
+            for (const prior of priorTickets) {
+                const priorEligibleDraw = getEligibleDrawDate(prior.parsedDate);
+                if (!priorEligibleDraw) continue;
+                
+                const priorDrawStr = AdminCore.getBrazilDateString(priorEligibleDraw);
+                if (priorDrawStr === eligibleDrawStr) {
+                    rechargeUsed = true;
+                    if (isFirstTicket) console.log('❌ Recharge already used by prior ticket');
+                    break;
+                }
+            }
+            
+            if (!rechargeUsed) {
+                if (isFirstTicket) console.log('✅ MATCH FOUND! Recharge not used by prior tickets');
+                if (isFirstTicket) console.log('====================================');
+                return recharge;
+            }
+        }
+        
+        if (isFirstTicket) console.log('❌ NO MATCH FOUND after checking all recharges');
+        if (isFirstTicket) console.log('====================================');
+        return null;
+    }
+
+    // ============================================
+    // Ticket Validation
+    // ============================================
+    
+    /**
+     * Validate a single ticket against recharge data
+     * @param {Object} ticket - Ticket entry object
+     * @param {Object[]} rechargesByGameId - Map of game ID to recharges
+     * @param {Object[]} ticketsByGameId - Map of game ID to tickets
+     * @returns {Object} Validation result
+     */
+    function validateTicket(ticket, rechargesByGameId, ticketsByGameId) {
+        const result = {
+            ticket: ticket,
+            status: ValidationStatus.UNKNOWN,
+            reason: '',
+            matchedRecharge: null,
+            isCutoff: false
+        };
+        
+        // Check if ticket already has a valid status
+        const existingStatus = (ticket.status || '').toUpperCase();
+        if (['VALID', 'VALIDADO', 'VALIDATED'].includes(existingStatus)) {
+            result.status = ValidationStatus.VALID;
+            result.reason = 'Pre-validated in source data';
+            return result;
+        }
+        
+        if (['INVALID', 'INVÁLIDO'].includes(existingStatus)) {
+            result.status = ValidationStatus.INVALID;
+            result.reason = 'Marked invalid in source data';
+            return result;
+        }
+        
+        // Get recharges for this game ID
+        const gameId = ticket.gameId;
+        if (!gameId) {
+            result.status = ValidationStatus.INVALID;
+            result.reason = 'Missing Game ID';
+            return result;
+        }
+        
+        const recharges = rechargesByGameId[gameId] || [];
+        const tickets = ticketsByGameId[gameId] || [];
+        
+        // HARDCORE DEBUG: Log first ticket validation
+        const isFirstTicket = ticket.ticketNumber && ticket.ticketNumber.includes('1°');
+        if (isFirstTicket) {
+            console.log('===== VALIDATING FIRST TICKET =====');
+            console.log('Ticket:', {
+                ticketNumber: ticket.ticketNumber,
+                gameId: gameId,
+                parsedDate: ticket.parsedDate,
+                timestamp: ticket.timestamp
+            });
+            console.log('Found recharges for this gameId:', recharges.length);
+            if (recharges.length > 0) {
+                console.log('First recharge for this player:', {
+                    gameId: recharges[0].gameId,
+                    amount: recharges[0].amount,
+                    rechargeTime: recharges[0].rechargeTime,
+                    isValidDate: recharges[0].rechargeTime instanceof Date && !isNaN(recharges[0].rechargeTime.getTime())
+                });
+            }
+            console.log('====================================');
+        }
+        
+        if (recharges.length === 0) {
+            result.status = ValidationStatus.INVALID;
+            result.reason = 'No recharge found for Game ID: ' + gameId;
+            return result;
+        }
+        
+        // Check for cutoff violation
+        // Validate parsedDate is a proper Date object before using Date methods
+        if (ticket.parsedDate && ticket.parsedDate instanceof Date && !isNaN(ticket.parsedDate.getTime())) {
+            const regHour = ticket.parsedDate.getHours();
+            const regMinute = ticket.parsedDate.getMinutes();
+            const dateStr = AdminCore.getBrazilDateString(ticket.parsedDate);
+            if (dateStr) {
+                const checkDate = new Date(`${dateStr}T12:00:00-03:00`);
+                const cutoffHour = getCutoffHour(checkDate);
+                
+                // If registered after cutoff, mark as cutoff shift
+                if (regHour >= cutoffHour || (regHour === cutoffHour - 1 && regMinute > 59)) {
+                    result.isCutoff = true;
+                }
+            }
+        }
+        
+        // Try to find matching recharge
+        const matchedRecharge = findMatchingRecharge(ticket, recharges, tickets);
+        
+        if (matchedRecharge) {
+            result.status = ValidationStatus.VALID;
+            result.reason = `Matched recharge R$${matchedRecharge.amount || '?'}`;
+            result.matchedRecharge = matchedRecharge;
+            
+            if (isFirstTicket) {
+                console.log('===== VALIDATION RESULT (FIRST TICKET) =====');
+                console.log('Status:', result.status);
+                console.log('Matched recharge:', {
+                    gameId: matchedRecharge.gameId,
+                    amount: matchedRecharge.amount,
+                    rechargeTime: matchedRecharge.rechargeTime,
+                    rechargeId: matchedRecharge.rechargeId?.substring(0, 30) + '...'
+                });
+                console.log('==========================================');
+            }
+        } else {
+            result.status = ValidationStatus.INVALID;
+            result.reason = 'Recharge exists but timing does not match draw window';
+            
+            if (isFirstTicket) {
+                console.log('===== VALIDATION RESULT (FIRST TICKET) =====');
+                console.log('Status:', result.status);
+                console.log('Reason:', result.reason);
+                console.log('==========================================');
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * Validate all tickets with caching
+     * @param {Object[]} entries - All entry objects
+     * @param {Object[]} recharges - All recharge objects
+     * @param {boolean} skipCache - Skip cache check (for platform-filtered data)
+     * @returns {Object} Validation results with statistics
+     */
+    async function validateAllTickets(entries, recharges, skipCache = false) {
+        // Check cache first (only for ALL platform data, not filtered)
+        if (!skipCache) {
+            const cached = DataFetcher.getCachedValidation();
+            if (cached && cached.stats.total === entries.length && cached.entriesCount === entries.length) {
+                console.log('Using cached validation results');
+                return cached;
+            }
+        }
+        
+        console.log('Computing validation results for', entries.length, 'entries with', recharges.length, 'recharges...');
+        
+        // Debug: Sample some recharge data
+        if (recharges.length > 0) {
+            const sample = recharges[0];
+            console.log('Sample recharge:', {
+                gameId: sample.gameId,
+                rechargeId: sample.rechargeId?.substring(0, 20) + '...',
+                hasTime: !!sample.rechargeTime,
+                isDate: sample.rechargeTime instanceof Date,
+                amount: sample.amount
+            });
+        }
+        
+        // Group recharges by game ID
         const rechargesByGameId = {};
         recharges.forEach(r => {
-            if (!rechargesByGameId[r.gameId]) rechargesByGameId[r.gameId] = [];
-            // Parse recharge time if not already parsed
-            if (!r.rechargeTimeObj) {
-                r.rechargeTimeObj = parseBrazilTime(r.rechargeTime);
+            if (!r.gameId) return;
+            if (!rechargesByGameId[r.gameId]) {
+                rechargesByGameId[r.gameId] = [];
             }
             rechargesByGameId[r.gameId].push(r);
         });
-        Object.values(rechargesByGameId).forEach(list =>
-            list.sort((a, b) => (a.rechargeTimeObj?.getTime() || 0) - (b.rechargeTimeObj?.getTime() || 0))
-        );
-
-        // Prep tickets by user
-        const entriesByGameId = {};
+        
+        console.log('Recharges grouped for', Object.keys(rechargesByGameId).length, 'unique game IDs');
+        
+        // Group tickets by game ID
+        const ticketsByGameId = {};
         entries.forEach(e => {
-            if (!entriesByGameId[e.gameId]) entriesByGameId[e.gameId] = [];
-            e.ticketTimeObj = parseTicketTime(e.timestamp || e.registrationDateTime);
-            entriesByGameId[e.gameId].push(e);
+            if (!e.gameId) return;
+            if (!ticketsByGameId[e.gameId]) {
+                ticketsByGameId[e.gameId] = [];
+            }
+            ticketsByGameId[e.gameId].push(e);
         });
-        Object.values(entriesByGameId).forEach(list =>
-            list.sort((a, b) => (a.ticketTimeObj?.getTime() || 0) - (b.ticketTimeObj?.getTime() || 0))
+        
+        // Validate each ticket
+        const results = [];
+        const stats = {
+            total: entries.length,
+            valid: 0,
+            invalid: 0,
+            unknown: 0,
+            cutoff: 0
+        };
+        
+        // Process in smaller batches to keep UI responsive
+        const batchSize = 50;
+        const totalBatches = Math.ceil(entries.length / batchSize);
+        
+        for (let i = 0; i < entries.length; i += batchSize) {
+            const batch = entries.slice(i, i + batchSize);
+            
+            for (const entry of batch) {
+                const validation = validateTicket(entry, rechargesByGameId, ticketsByGameId);
+                results.push(validation);
+                
+                switch (validation.status) {
+                    case ValidationStatus.VALID:
+                        stats.valid++;
+                        break;
+                    case ValidationStatus.INVALID:
+                        stats.invalid++;
+                        break;
+                    default:
+                        stats.unknown++;
+                }
+                
+                if (validation.isCutoff) {
+                    stats.cutoff++;
+                }
+            }
+            
+            // Yield to main thread after each batch - use longer delay for UI responsiveness
+            if (i + batchSize < entries.length) {
+                await new Promise(resolve => setTimeout(resolve, 5));
+            }
+        }
+        
+        const result = {
+            results,
+            stats,
+            rechargeCount: recharges.length
+        };
+        
+        console.log('Validation complete:', stats);
+        console.log('Sample validated tickets (first 3 VALID):', 
+            results.filter(v => v.status === 'VALID').slice(0, 3).map(v => ({
+                ticket: v.ticket?.ticketNumber,
+                gameId: v.ticket?.gameId,
+                hasRecharge: !!v.matchedRecharge,
+                amount: v.matchedRecharge?.amount
+            }))
         );
+        
+        // Cache the results
+        DataFetcher.setCachedValidation(result);
+        
+        return result;
+    }
 
-        const validated = [];
-
-        Object.keys(entriesByGameId).forEach(gameId => {
-            const tickets = entriesByGameId[gameId];
-            const userRecharges = rechargesByGameId[gameId] || [];
-            const consumed = new Set();
-
-            // Precompute windows per recharge
-            const rechargeWindows = userRecharges.map(r => ({
-                recharge: r,
-                windows: computeEligibleDraws(r.rechargeTimeObj)
-            }));
-
-            tickets.forEach(ticket => {
-                let validity = 'INVALID';
-                let reason = 'NO_ELIGIBLE_RECHARGE';
-                let bound = null;
-                let cutoffFlag = false;
-
-                if (!ticket.ticketTimeObj) {
-                    validity = 'INVALID';
-                    reason = 'INVALID_TICKET_TIME';
-                    validated.push(createResult(ticket, validity, reason, bound, cutoffFlag));
-                    return;
-                }
-
-                const t = ticket.ticketTimeObj;
-                const drawInfo = ticketDrawDay(t);
-                if (!drawInfo) {
-                    validity = 'INVALID';
-                    reason = 'NO_ELIGIBLE_RECHARGE';
-                    validated.push(createResult(ticket, validity, reason, bound, cutoffFlag));
-                    return;
-                }
-                const ticketDrawDayDate = drawInfo.day;
-
-                // Determine if there exists ANY recharge before this ticket
-                const hasRechargeBefore = userRecharges.some(r => r.rechargeTimeObj && t > r.rechargeTimeObj);
-
-                let foundMatch = false;
-                let expiredCandidate = false;
-                let consumedCandidate = false;
-
-                for (const { recharge, windows } of rechargeWindows) {
-                    if (!windows) continue;
-                    const rt = recharge.rechargeTimeObj;
-                    if (!rt) continue;
-
-                    const sameDayBrt = (a, b) => {
-                        const fa = brtFields(a);
-                        const fb = brtFields(b);
-                        return fa.year === fb.year && fa.month === fb.month && fa.day === fb.day;
-                    };
-
-                    const isEligible1 = sameDayBrt(ticketDrawDayDate, windows.eligible1.day);
-                    const isEligible2 = sameDayBrt(ticketDrawDayDate, windows.eligible2.day);
-
-                    // Ticket must be after recharge time
-                    if (t <= rt) {
-                        continue; // do not mark before-recharge here; handled after loop
-                    }
-
-                    if (!(isEligible1 || isEligible2)) {
-                        if (ticketDrawDayDate > windows.eligible2.day) expiredCandidate = true;
-                        continue;
-                    }
-
-                    if (consumed.has(recharge.rechargeId)) {
-                        consumedCandidate = true;
-                        continue;
-                    }
-
-                    // Passed all checks
-                    foundMatch = true;
-                    bound = recharge;
-                    validity = 'VALID'; // Recharge status check removed - all bound recharges are valid
-                    reason = null;
-                    consumed.add(recharge.rechargeId);
-                    if (isEligible2) cutoffFlag = true; // using second eligible day
-                    break;
-                }
-
-                if (!foundMatch) {
-                    if (!hasRechargeBefore) {
-                        reason = 'INVALID_TICKET_BEFORE_RECHARGE';
-                    } else if (expiredCandidate) {
-                        reason = 'INVALID_RECHARGE_WINDOW_EXPIRED';
-                    } else if (consumedCandidate) {
-                        reason = 'INVALID_NOT_FIRST_TICKET_AFTER_RECHARGE';
-                    } else {
-                        reason = 'NO_ELIGIBLE_RECHARGE';
-                    }
-                }
-
-                validated.push(createResult(ticket, validity, reason, bound, cutoffFlag));
-            });
+    // ============================================
+    // Engagement Analysis
+    // ============================================
+    
+    /**
+     * Analyze engagement between rechargers and ticket creators
+     * @param {Object[]} entries - All entries
+     * @param {Object[]} recharges - All recharges
+     * @returns {Object} Engagement statistics
+     */
+    function analyzeEngagement(entries, recharges) {
+        // Get unique game IDs
+        const rechargerIds = new Set(recharges.map(r => r.gameId).filter(Boolean));
+        const ticketCreatorIds = new Set(entries.map(e => e.gameId).filter(Boolean));
+        
+        // Calculate overlaps
+        const participantIds = new Set(
+            [...ticketCreatorIds].filter(id => rechargerIds.has(id))
+        );
+        
+        const rechargedNoTicket = new Set(
+            [...rechargerIds].filter(id => !ticketCreatorIds.has(id))
+        );
+        
+        // Multi-recharge analysis
+        const rechargeCounts = {};
+        recharges.forEach(r => {
+            if (!r.gameId) return;
+            rechargeCounts[r.gameId] = (rechargeCounts[r.gameId] || 0) + 1;
         });
-
-        return validated;
-    }
-
-    /**
-     * Create validation result object
-     * @param {Object} ticket - Ticket object
-     * @param {string} validity - Validity status
-     * @param {string|null} reason - Reason code
-     * @param {Object|null} bound - Bound recharge
-     * @param {boolean} cutoffFlag - Cutoff flag
-     * @returns {Object} Result object
-     */
-    function createResult(ticket, validity, reason, bound, cutoffFlag) {
+        
+        const multiRechargers = Object.entries(rechargeCounts)
+            .filter(([_, count]) => count > 1)
+            .map(([id, _]) => id);
+        
+        const multiRechargeNoTicket = multiRechargers.filter(id => !ticketCreatorIds.has(id));
+        
         return {
-            ...ticket,
-            validity,
-            invalidReasonCode: reason,
-            boundRechargeId: bound?.rechargeId || null,
-            boundRechargeTime: bound?.rechargeTime || null,
-            boundRechargeAmount: bound?.amount || bound?.rechargeAmount || null,
-            cutoffFlag
+            totalRechargers: rechargerIds.size,
+            totalParticipants: participantIds.size,
+            rechargedNoTicket: rechargedNoTicket.size,
+            participationRate: rechargerIds.size > 0 
+                ? ((participantIds.size / rechargerIds.size) * 100).toFixed(1)
+                : 0,
+            multiRechargeNoTicket: multiRechargeNoTicket.length,
+            rechargerIds: [...rechargerIds],
+            participantIds: [...participantIds],
+            rechargedNoTicketIds: [...rechargedNoTicket]
         };
     }
 
     /**
-     * Get human-readable reason text for a reason code
-     * @param {string} code - Reason code
-     * @returns {string} Human-readable text
+     * Analyze engagement by date
+     * @param {Object[]} entries - All entries
+     * @param {Object[]} recharges - All recharges
+     * @param {number} days - Number of days to analyze
+     * @returns {Object[]} Daily engagement data
      */
-    function getReasonCodeText(code) {
-        const reasons = {
-            'NO_RECHARGE_DATA': 'No recharge data uploaded',
-            'NO_ELIGIBLE_RECHARGE': 'No recharge window covers this ticket',
-            'INVALID_TICKET_BEFORE_RECHARGE': 'Ticket created before any recharge',
-            'INVALID_NOT_FIRST_TICKET_AFTER_RECHARGE': 'Recharge already consumed by a previous ticket',
-            'INVALID_RECHARGE_WINDOW_EXPIRED': 'Recharge expired after its second eligible draw day',
-            'RECHARGE_INVALIDATED': 'Bound recharge was invalidated',
-            'INVALID_TICKET_TIME': 'Ticket registration time could not be parsed'
-        };
-        return reasons[code] || 'Unknown reason';
-    }
-
-    /**
-     * Get validation statistics
-     * @param {Array} validatedEntries - Array of validated entries
-     * @param {Array} recharges - Array of recharges
-     * @returns {Object} Statistics object
-     */
-    function getStatistics(validatedEntries, recharges) {
-        const validCount = validatedEntries.filter(e => e.validity === 'VALID').length;
-        const invalidCount = validatedEntries.filter(e => e.validity === 'INVALID').length;
-        const unknownCount = validatedEntries.filter(e => e.validity === 'UNKNOWN').length;
-        const cutoffFlagCount = validatedEntries.filter(e => e.cutoffFlag).length;
-
-        const reasonCounts = {};
-        validatedEntries.forEach(e => {
-            if (e.invalidReasonCode) {
-                reasonCounts[e.invalidReasonCode] = (reasonCounts[e.invalidReasonCode] || 0) + 1;
+    function analyzeEngagementByDate(entries, recharges, days = 7) {
+        const dailyData = [];
+        const now = AdminCore.getBrazilTime();
+        
+        // Pre-compute date strings for all entries (optimization)
+        const entriesByDate = new Map();
+        entries.forEach(e => {
+            if (e.parsedDate && e.parsedDate instanceof Date && !isNaN(e.parsedDate.getTime())) {
+                const dateStr = AdminCore.getBrazilDateString(e.parsedDate);
+                if (dateStr) {
+                    if (!entriesByDate.has(dateStr)) {
+                        entriesByDate.set(dateStr, []);
+                    }
+                    entriesByDate.get(dateStr).push(e);
+                }
             }
         });
-
-        return {
-            totalRecharges: recharges?.length || 0,
-            valid: validCount,
-            invalid: invalidCount,
-            unknown: unknownCount,
-            cutoff: cutoffFlagCount,
-            invalidReasons: reasonCounts
-        };
+        
+        // Pre-compute date strings for all recharges (optimization)
+        const rechargesByDate = new Map();
+        recharges.forEach(r => {
+            if (r.rechargeTime && r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                const dateStr = AdminCore.getBrazilDateString(r.rechargeTime);
+                if (dateStr) {
+                    if (!rechargesByDate.has(dateStr)) {
+                        rechargesByDate.set(dateStr, []);
+                    }
+                    rechargesByDate.get(dateStr).push(r);
+                }
+            }
+        });
+        
+        for (let i = 0; i < days; i++) {
+            const date = new Date(now);
+            date.setDate(date.getDate() - i);
+            const dateStr = AdminCore.getBrazilDateString(date);
+            
+            // Use pre-computed maps instead of filtering entire arrays each time
+            const dayEntries = entriesByDate.get(dateStr) || [];
+            const dayRecharges = rechargesByDate.get(dateStr) || [];
+            
+            const engagement = analyzeEngagement(dayEntries, dayRecharges);
+            
+            dailyData.push({
+                date: dateStr,
+                displayDate: AdminCore.formatBrazilDateTime(date, {
+                    day: '2-digit',
+                    month: '2-digit'
+                }),
+                totalEntries: dayEntries.length,
+                ...engagement
+            });
+        }
+        
+        return dailyData;
     }
 
     // ============================================
     // Public API
     // ============================================
     return {
-        validateEntries,
-        getReasonCodeText,
-        getStatistics,
-        ValidationStatus,
+        // Validation
+        validateTicket,
+        validateAllTickets,
         
-        // Export helper functions for testing/debugging
-        parseBrazilTime,
-        parseTicketTime,
+        // Engagement
+        analyzeEngagement,
+        analyzeEngagementByDate,
+        
+        // Draw calendar helpers
         isNoDrawDay,
-        getCutoffTime,
-        computeEligibleDraws
+        isEarlyCutoffDay,
+        getCutoffHour,
+        getNextValidDrawDate,
+        getEligibleDrawDate,
+        
+        // Constants
+        ValidationStatus,
+        DEFAULT_CUTOFF_HOUR,
+        EARLY_CUTOFF_HOUR
     };
 })();
+
