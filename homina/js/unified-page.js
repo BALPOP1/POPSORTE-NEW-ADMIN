@@ -550,7 +550,12 @@ window.UnifiedPage = (function() {
         const isWithinWindow = ticketTimeMs >= windowStartMs && ticketTimeMs <= windowEndMs;
         
         // DEBUG: Log detailed eligibility check for troubleshooting
-        const DEBUG_CHECK = false; // Set to true to enable detailed logging
+        // Enable for dates around Jan 2-3, 2026 (the problematic range)
+        const ticketYear = ticketTime.getFullYear();
+        const ticketMonth = ticketTime.getMonth();
+        const ticketDay = ticketTime.getDate();
+        const DEBUG_CHECK = (ticketYear === 2026 && ticketMonth === 0 && (ticketDay === 2 || ticketDay === 3));
+        
         if (DEBUG_CHECK) {
             const ticketStr = AdminCore.formatBrazilDateTime(ticketTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
             const rechargeStr = AdminCore.formatBrazilDateTime(rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
@@ -621,22 +626,36 @@ window.UnifiedPage = (function() {
         // PHASE 1: Match all VALID entries first
         console.log('🔵 PHASE 1: Matching VALID entries...');
         
-        // DEBUG: Track specific Game ID for troubleshooting
-        const DEBUG_GAME_ID = '3599051608';
-        const debugEntries = sortedEntries.filter(e => e.gameId === DEBUG_GAME_ID);
-        const debugRecharges = currentData.allRecharges.filter(r => r.gameId === DEBUG_GAME_ID);
+        // DEBUG: Track specific Game IDs for troubleshooting
+        const DEBUG_GAME_IDS = ['3599051608', '3956778685'];
+        const debugEntries = sortedEntries.filter(e => DEBUG_GAME_IDS.includes(e.gameId));
+        const debugRecharges = currentData.allRecharges.filter(r => DEBUG_GAME_IDS.includes(r.gameId));
         
         if (debugEntries.length > 0 || debugRecharges.length > 0) {
-            console.log(`\n🔍 DEBUG GameID ${DEBUG_GAME_ID}:`);
-            console.log(`   Entries found: ${debugEntries.length}`);
-            debugEntries.forEach((e, i) => {
-                const timeStr = e.parsedDate ? AdminCore.formatBrazilDateTime(e.parsedDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}) : 'NO DATE';
-                console.log(`   Entry ${i+1}: Status=${e.status}, Time=${timeStr}, Ticket=${e.ticketNumber}`);
-            });
-            console.log(`   Recharges found: ${debugRecharges.length}`);
-            debugRecharges.forEach((r, i) => {
-                const timeStr = r.rechargeTime ? AdminCore.formatBrazilDateTime(r.rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}) : 'NO DATE';
-                console.log(`   Recharge ${i+1}: Order=${r.rechargeId?.substring(0, 20)}..., Time=${timeStr}, Amount=R$${r.amount}`);
+            DEBUG_GAME_IDS.forEach(debugId => {
+                const gameEntries = debugEntries.filter(e => e.gameId === debugId);
+                const gameRecharges = debugRecharges.filter(r => r.gameId === debugId);
+                if (gameEntries.length > 0 || gameRecharges.length > 0) {
+                    console.log(`\n🔍 DEBUG GameID ${debugId}:`);
+                    console.log(`   Entries found: ${gameEntries.length}`);
+                    gameEntries.forEach((e, i) => {
+                        const timeStr = e.parsedDate ? AdminCore.formatBrazilDateTime(e.parsedDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'NO DATE';
+                        const rawTime = e.timestamp || 'NO RAW';
+                        console.log(`   Entry ${i+1}: Status=${e.status}, ParsedTime=${timeStr}, RawTime=${rawTime}, Ticket=${e.ticketNumber}`);
+                        if (e.parsedDate) {
+                            console.log(`      Date object: ${e.parsedDate.toISOString()}, Timestamp: ${e.parsedDate.getTime()}`);
+                        }
+                    });
+                    console.log(`   Recharges found: ${gameRecharges.length}`);
+                    gameRecharges.forEach((r, i) => {
+                        const timeStr = r.rechargeTime ? AdminCore.formatBrazilDateTime(r.rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'NO DATE';
+                        const rawTime = r.rechargeTimeRaw || 'NO RAW';
+                        console.log(`   Recharge ${i+1}: Order=${r.rechargeId?.substring(0, 20)}..., ParsedTime=${timeStr}, RawTime=${rawTime}, Amount=R$${r.amount}`);
+                        if (r.rechargeTime) {
+                            console.log(`      Date object: ${r.rechargeTime.toISOString()}, Timestamp: ${r.rechargeTime.getTime()}`);
+                        }
+                    });
+                }
             });
         }
         
@@ -661,19 +680,20 @@ window.UnifiedPage = (function() {
             );
             
             // DEBUG: Show filtering effect
-            if (matchCount < 3 || entry.gameId === DEBUG_GAME_ID) {
+            const isDebugGameId = DEBUG_GAME_IDS.includes(entry.gameId);
+            if (matchCount < 3 || isDebugGameId) {
                 console.log(`🔎 GameID=${entry.gameId}: Total recharges=${allGameIdRecharges.length}, Available (not bound)=${userRecharges.length}, Already bound=${allGameIdRecharges.length - userRecharges.length}`);
             }
             
             if (userRecharges.length === 0) {
-                if (matchCount < 3) {
+                if (matchCount < 3 || isDebugGameId) {
                     console.log(`⚠️ No available recharges for GameID=${entry.gameId}, Ticket=${entry.ticketNumber} (all ${allGameIdRecharges.length} recharges already bound)`);
                 }
                 continue;
             }
             
             // DEBUG: Show available recharges for first few entries
-            if (matchCount < 3) {
+            if (matchCount < 3 || isDebugGameId) {
                 console.log(`🔎 Entry GameID=${entry.gameId}, Available recharges: ${userRecharges.length}, Bound so far: ${boundOrderNumbers.size}`);
                 if (userRecharges.length > 0) {
                     console.log(`   First available recharge: ${userRecharges[0].rechargeId.substring(0, 20)}... (R$${userRecharges[0].amount})`);
@@ -686,18 +706,26 @@ window.UnifiedPage = (function() {
             let oldestRecharge = null;
             let earliestTime = Infinity;
             let eligibilityRejects = 0;
-            const isDebugGameId = entry.gameId === DEBUG_GAME_ID;
             
             for (const recharge of userRecharges) {
                 // ⚠️ CRITICAL: ENFORCE ELIGIBILITY WINDOW - Cannot use recharge for Day 3+ tickets!
                 const isEligible = isTicketEligible(ticketTime, recharge.rechargeTime);
                 
                 if (isDebugGameId) {
-                    const ticketStr = AdminCore.formatBrazilDateTime(ticketTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
-                    const rechargeStr = AdminCore.formatBrazilDateTime(recharge.rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
+                    const ticketStr = AdminCore.formatBrazilDateTime(ticketTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+                    const rechargeStr = AdminCore.formatBrazilDateTime(recharge.rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
                     const window = calculateEligibilityWindow(recharge.rechargeTime);
-                    const windowEndStr = window ? AdminCore.formatBrazilDateTime(window.endDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}) : 'N/A';
-                    console.log(`   🔍 Checking: Ticket=${ticketStr}, Recharge=${rechargeStr}, Eligible=${isEligible}, WindowEnd=${windowEndStr}`);
+                    const windowStartStr = window ? AdminCore.formatBrazilDateTime(window.startDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'N/A';
+                    const windowEndStr = window ? AdminCore.formatBrazilDateTime(window.endDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'N/A';
+                    console.log(`   🔍 Phase 1 Checking: Ticket=${ticketStr}, Recharge=${rechargeStr}, Eligible=${isEligible}`);
+                    console.log(`      Window: ${windowStartStr} to ${windowEndStr}`);
+                    if (!isEligible) {
+                        const ticketMs = ticketTime.getTime();
+                        const windowStartMs = window?.startDate.getTime() || 0;
+                        const windowEndMs = window?.endDate.getTime() || 0;
+                        console.log(`      ❌ REJECTED: Ticket timestamp=${ticketMs}, Window=${windowStartMs} to ${windowEndMs}`);
+                        console.log(`      Ticket is ${ticketMs < windowStartMs ? 'BEFORE' : 'AFTER'} window`);
+                    }
                 }
                 
                 if (!isEligible) {
@@ -780,10 +808,10 @@ window.UnifiedPage = (function() {
                 !boundOrderNumbers.has(r.rechargeId)
             );
             
-            const isDebugGameId = entry.gameId === DEBUG_GAME_ID;
+            const isDebugGameId = DEBUG_GAME_IDS.includes(entry.gameId);
             if (isDebugGameId) {
-                const ticketStr = AdminCore.formatBrazilDateTime(entry.parsedDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
-                console.log(`\n🔍 DEBUG Phase 2 - GameID ${DEBUG_GAME_ID}: Ticket=${ticketStr}, Status=${csvStatus}, Available recharges=${userRecharges.length}`);
+                const ticketStr = AdminCore.formatBrazilDateTime(entry.parsedDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+                console.log(`\n🔍 DEBUG Phase 2 - GameID ${entry.gameId}: Ticket=${ticketStr}, Status=${csvStatus}, Available recharges=${userRecharges.length}`);
             }
             
             if (userRecharges.length === 0) {
@@ -805,11 +833,20 @@ window.UnifiedPage = (function() {
                 const isEligible = isTicketEligible(ticketTime, recharge.rechargeTime);
                 
                 if (isDebugGameId) {
-                    const ticketStr = AdminCore.formatBrazilDateTime(ticketTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
-                    const rechargeStr = AdminCore.formatBrazilDateTime(recharge.rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'});
+                    const ticketStr = AdminCore.formatBrazilDateTime(ticketTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+                    const rechargeStr = AdminCore.formatBrazilDateTime(recharge.rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
                     const window = calculateEligibilityWindow(recharge.rechargeTime);
-                    const windowEndStr = window ? AdminCore.formatBrazilDateTime(window.endDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'}) : 'N/A';
-                    console.log(`   🔍 Phase 2 Checking: Ticket=${ticketStr}, Recharge=${rechargeStr}, Eligible=${isEligible}, WindowEnd=${windowEndStr}`);
+                    const windowStartStr = window ? AdminCore.formatBrazilDateTime(window.startDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'N/A';
+                    const windowEndStr = window ? AdminCore.formatBrazilDateTime(window.endDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'}) : 'N/A';
+                    console.log(`   🔍 Phase 2 Checking: Ticket=${ticketStr}, Recharge=${rechargeStr}, Eligible=${isEligible}`);
+                    console.log(`      Window: ${windowStartStr} to ${windowEndStr}`);
+                    if (!isEligible) {
+                        const ticketMs = ticketTime.getTime();
+                        const windowStartMs = window?.startDate.getTime() || 0;
+                        const windowEndMs = window?.endDate.getTime() || 0;
+                        console.log(`      ❌ REJECTED: Ticket timestamp=${ticketMs}, Window=${windowStartMs} to ${windowEndMs}`);
+                        console.log(`      Ticket is ${ticketMs < windowStartMs ? 'BEFORE' : 'AFTER'} window`);
+                    }
                 }
                 
                 if (!isEligible) {
