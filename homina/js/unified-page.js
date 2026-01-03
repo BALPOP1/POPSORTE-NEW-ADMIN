@@ -39,30 +39,12 @@ window.UnifiedPage = (function() {
         gameId: '',
         whatsapp: '',
         contest: '',
-        validity: 'all'
+        validity: 'all',
+        drawDate: '',
+        cutoffFlag: ''
     };
-    let sortBy = 'date-desc'; // Default: newest first
-    
-    /**
-     * Check if entry was registered after cutoff time (20:00 BRT, 16:00 on Dec 24/31)
-     * @param {Object} entry - Entry object with parsedDate
-     * @returns {boolean} True if after cutoff
-     */
-    function isEntryCutoff(entry) {
-        if (!entry.parsedDate || !(entry.parsedDate instanceof Date) || isNaN(entry.parsedDate.getTime())) {
-            return false;
-        }
-        
-        const regHour = entry.parsedDate.getHours();
-        const month = entry.parsedDate.getMonth();
-        const day = entry.parsedDate.getDate();
-        
-        // Check for early cutoff days (Dec 24, Dec 31)
-        const isEarlyCutoffDay = month === 11 && (day === 24 || day === 31);
-        const cutoffHour = isEarlyCutoffDay ? 16 : 20;
-        
-        return regHour >= cutoffHour;
-    }
+    let sortColumn = 'timestamp'; // Default sort column
+    let sortDirection = 'desc'; // Default: descending (newest first)
     
     // Results state
     let filteredResults = [];
@@ -297,22 +279,18 @@ window.UnifiedPage = (function() {
             });
         }
         
-        // Stats - ✅ COUNT DIRECTLY FROM CSV STATUS COLUMN + CUTOFF DETECTION
-        const validCount = entries.filter(e => {
-            const status = (e.status || '').toUpperCase();
-            return status === 'VALID' || status === 'VÁLIDO';
-        }).length;
+        // Stats - ✅ COUNT FROM VALIDATED ENTRIES
+        // First validate all entries to get accurate counts
+        let validatedForStats = entries;
+        if (allRecharges && allRecharges.length > 0) {
+            validatedForStats = RechargeValidator.validateEntries(entries, allRecharges);
+        }
         
-        const invalidCount = entries.filter(e => {
-            const status = (e.status || '').toUpperCase();
-            return status === 'INVALID' || status === 'INVÁLIDO';
-        }).length;
+        const stats = RechargeValidator.getStatistics(validatedForStats, allRecharges);
         
-        const cutoffCount = entries.filter(e => isEntryCutoff(e)).length;
-        
-        document.getElementById('statValid').textContent = validCount.toLocaleString();
-        document.getElementById('statInvalid').textContent = invalidCount.toLocaleString();
-        document.getElementById('statCutoff').textContent = cutoffCount.toLocaleString();
+        document.getElementById('statValid').textContent = stats.valid.toLocaleString();
+        document.getElementById('statInvalid').textContent = stats.invalid.toLocaleString();
+        document.getElementById('statCutoff').textContent = stats.cutoff.toLocaleString();
         
         // Show platform-filtered recharge count
         document.getElementById('statRechargesCount').textContent = recharges.length.toLocaleString();
@@ -354,6 +332,19 @@ window.UnifiedPage = (function() {
             contestSelect.innerHTML = '<option value="">All</option>' + contests.map(c => `<option value="${c}">${c}</option>`).join('');
         }
         
+        const drawDates = [...new Set(entries.map(e => e.drawDate).filter(Boolean))].sort((a, b) => {
+            // Sort dates in descending order (newest first)
+            const [dayA, monthA, yearA] = a.split('/').map(Number);
+            const [dayB, monthB, yearB] = b.split('/').map(Number);
+            const dateA = new Date(yearA, monthA - 1, dayA);
+            const dateB = new Date(yearB, monthB - 1, dayB);
+            return dateB - dateA;
+        });
+        const drawDateSelect = document.getElementById('filterDrawDate');
+        if (drawDateSelect) {
+            drawDateSelect.innerHTML = '<option value="">All Dates</option>' + drawDates.map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+        
         // Apply filters
         applyEntriesFilters();
     }
@@ -361,6 +352,24 @@ window.UnifiedPage = (function() {
     function applyEntriesFilters() {
         let result = [...currentData.entries];
         
+        // ✅ VALIDATE ENTRIES USING ADMIN LOGIC
+        if (currentData.allRecharges && currentData.allRecharges.length > 0) {
+            result = RechargeValidator.validateEntries(result, currentData.allRecharges);
+            console.log('✅ Entries validated:', result.length, 'entries');
+        } else {
+            result = result.map(e => ({
+                ...e,
+                validity: 'UNKNOWN',
+                invalidReasonCode: 'NO_RECHARGE_DATA',
+                boundRechargeId: null,
+                boundRechargeTime: null,
+                boundRechargeAmount: null,
+                cutoffFlag: false
+            }));
+            console.log('⚠️ No recharge data - all entries marked as UNKNOWN');
+        }
+        
+        // Apply filters on validated results
         if (entriesFilters.gameId) {
             const term = entriesFilters.gameId.toLowerCase();
             result = result.filter(e => e.gameId.toLowerCase().includes(term));
@@ -374,66 +383,57 @@ window.UnifiedPage = (function() {
         }
         if (entriesFilters.validity !== 'all') {
             result = result.filter(e => {
-                // ✅ READ STATUS DIRECTLY FROM CSV (Column H - STATUS)
-                const csvStatus = (e.status || 'UNKNOWN').toUpperCase();
-                const isValid = csvStatus === 'VALID' || csvStatus === 'VÁLIDO';
-                const isInvalid = csvStatus === 'INVALID' || csvStatus === 'INVÁLIDO';
+                const isValid = e.validity === 'VALID';
+                const isInvalid = e.validity === 'INVALID';
                 return entriesFilters.validity === 'valid' ? isValid : isInvalid;
             });
         }
-        
-        // ✅ APPLY SORTING
-        switch (sortBy) {
-            case 'date-asc':
-                result.sort((a, b) => {
-                    if (!a.parsedDate || !b.parsedDate) return 0;
-                    return a.parsedDate.getTime() - b.parsedDate.getTime();
-                });
-                break;
-            case 'date-desc':
-                result.sort((a, b) => {
-                    if (!a.parsedDate || !b.parsedDate) return 0;
-                    return b.parsedDate.getTime() - a.parsedDate.getTime();
-                });
-                break;
-            case 'cutoff-yes':
-                result.sort((a, b) => {
-                    const aCutoff = isEntryCutoff(a) ? 1 : 0;
-                    const bCutoff = isEntryCutoff(b) ? 1 : 0;
-                    return bCutoff - aCutoff; // Cutoff first
-                });
-                break;
-            case 'cutoff-no':
-                result.sort((a, b) => {
-                    const aCutoff = isEntryCutoff(a) ? 1 : 0;
-                    const bCutoff = isEntryCutoff(b) ? 1 : 0;
-                    return aCutoff - bCutoff; // No cutoff first
-                });
-                break;
-            case 'status-valid':
-                result.sort((a, b) => {
-                    const aStatus = (a.status || '').toUpperCase();
-                    const bStatus = (b.status || '').toUpperCase();
-                    const aValid = (aStatus === 'VALID' || aStatus === 'VÁLIDO') ? 1 : 0;
-                    const bValid = (bStatus === 'VALID' || bStatus === 'VÁLIDO') ? 1 : 0;
-                    return bValid - aValid; // Valid first
-                });
-                break;
-            case 'status-invalid':
-                result.sort((a, b) => {
-                    const aStatus = (a.status || '').toUpperCase();
-                    const bStatus = (b.status || '').toUpperCase();
-                    const aInvalid = (aStatus === 'INVALID' || aStatus === 'INVÁLIDO') ? 1 : 0;
-                    const bInvalid = (bStatus === 'INVALID' || bStatus === 'INVÁLIDO') ? 1 : 0;
-                    return bInvalid - aInvalid; // Invalid first
-                });
-                break;
+        if (entriesFilters.drawDate) {
+            result = result.filter(e => e.drawDate === entriesFilters.drawDate);
+        }
+        if (entriesFilters.cutoffFlag) {
+            const showCutoff = entriesFilters.cutoffFlag === 'true';
+            result = result.filter(e => showCutoff ? e.cutoffFlag : !e.cutoffFlag);
         }
         
         filteredEntries = result;
+        applySorting(); // Apply column-based sorting
         entriesPage = 1;
         renderEntriesTable();
         renderEntriesPagination();
+    }
+
+    /**
+     * Apply sorting to filtered entries based on sortColumn and sortDirection
+     */
+    function applySorting() {
+        filteredEntries.sort((a, b) => {
+            let aVal = a[sortColumn];
+            let bVal = b[sortColumn];
+            
+            // Special handling for different column types
+            if (sortColumn === 'numbers') {
+                aVal = a.numbers.join(',');
+                bVal = b.numbers.join(',');
+            } else if (sortColumn === 'timestamp') {
+                aVal = a.parsedDate?.getTime() || 0;
+                bVal = b.parsedDate?.getTime() || 0;
+            } else if (sortColumn === 'validity') {
+                // Sort order: VALID > INVALID > UNKNOWN
+                const order = { 'VALID': 2, 'INVALID': 1, 'UNKNOWN': 0 };
+                aVal = order[a.validity] || 0;
+                bVal = order[b.validity] || 0;
+            }
+            
+            // Handle null/undefined
+            if (aVal === null || aVal === undefined) aVal = '';
+            if (bVal === null || bVal === undefined) bVal = '';
+            
+            // Compare
+            if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
     }
 
     function renderEntriesTable() {
@@ -465,34 +465,30 @@ window.UnifiedPage = (function() {
         
         try {
             tbody.innerHTML = pageEntries.map((entry, index) => {
-            // ✅ READ STATUS DIRECTLY FROM CSV (Column H - STATUS)
-            const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
-            const status = csvStatus;
-            
-            // Check for CUTOFF (registered after 20:00 BRT)
-            const isCutoff = isEntryCutoff(entry);
+            // ✅ USE VALIDATED STATUS FROM ADMIN LOGIC
+            const status = entry.validity || 'UNKNOWN';
+            const isCutoff = entry.cutoffFlag || false;
             
             // Debug ONLY first entry to avoid performance issues
             if (index === 0) {
                 console.log('🎯 FIRST ENTRY:', entry.gameId, entry.ticketNumber);
-                console.log('   CSV Status:', entry.status);
-                console.log('   Parsed Status:', status);
+                console.log('   Validity:', status);
+                console.log('   Bound Recharge:', entry.boundRechargeId);
                 console.log('   Is Cutoff:', isCutoff);
+                console.log('   Reason:', entry.invalidReasonCode);
             }
             
-            // Status badge based on CSV column + CUTOFF indicator
+            // Status badge based on validated results
             let statusBadge = '';
             switch (status) {
                 case 'VALID':
-                case 'VÁLIDO':
                     statusBadge = '<span class="badge badge-success">✅ VALID</span>';
                     break;
                 case 'INVALID':
-                case 'INVÁLIDO':
                     statusBadge = '<span class="badge badge-danger">❌ INVALID</span>';
                     break;
                 default:
-                    statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
+                    statusBadge = '<span class="badge badge-warning">❓ UNKNOWN</span>';
             }
             
             // Add CUTOFF badge if applicable
@@ -513,66 +509,45 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // RECHARGE INFO - DIRECT MATCH BY GAME ID
-            let rechargeInfo = '<span class="text-muted" style="font-size:0.85rem">No recharge found</span>';
+            // RECHARGE INFO - FROM BOUND RECHARGE (VALIDATED)
+            let rechargeInfo = '<span class="text-muted" style="font-size:0.85rem">No recharge bound</span>';
             
-            try {
-                // Find recharge directly by matching gameId
-                const entryGameId = entry.gameId;
-                
-                if (entryGameId && currentData.allRecharges && currentData.allRecharges.length > 0) {
-                    // Find ALL recharges for this game ID
-                    const userRecharges = currentData.allRecharges.filter(r => r.gameId === entryGameId);
+            if (entry.boundRechargeId) {
+                try {
+                    // ORDER NUMBER
+                    const orderNumber = entry.boundRechargeId || '';
+                    const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
                     
-                    if (userRecharges.length > 0) {
-                        // Get the most recent recharge (recharges are sorted by time descending)
-                        const r = userRecharges[0];
-                        
-                        // ORDER NUMBER from CSV (Column 1)
-                        const orderNumber = r.rechargeId || '';
-                        const shortOrderNumber = orderNumber.length > 20 ? orderNumber.substring(0, 20) + '...' : orderNumber;
-                        
-                        // CHARGE AMOUNT from CSV (Column 8)
-                        const chargeAmount = r.amount || 0;
-                        const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
-                        
-                        // TIME from CSV (Column 5)
-                        let timeDisplay = '-';
-                        if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
-                            timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                    // CHARGE AMOUNT
+                    const chargeAmount = entry.boundRechargeAmount || 0;
+                    const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
+                    
+                    // TIME
+                    let timeDisplay = entry.boundRechargeTime || '-';
+                    // Try to parse and format if it's a date string
+                    if (timeDisplay && timeDisplay !== '-') {
+                        const parsed = RechargeValidator.parseBrazilTime(timeDisplay);
+                        if (parsed) {
+                            timeDisplay = AdminCore.formatBrazilDateTime(parsed, { 
                                 day: '2-digit', 
                                 month: '2-digit', 
                                 hour: '2-digit', 
                                 minute: '2-digit' 
                             });
-                        } else if (r.rechargeTimeRaw) {
-                            timeDisplay = r.rechargeTimeRaw;
                         }
-                        
-                        rechargeInfo = `
-                            <div class="recharge-details">
-                                <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
-                                <div class="recharge-time">${timeDisplay}</div>
-                                <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
-                            </div>
-                        `;
-                        
-                        // Debug first entry with recharge
-                        if (index === 0 && userRecharges.length > 0) {
-                            console.log('💰 RECHARGE FOUND FOR FIRST ENTRY:');
-                            console.log('   Game ID:', entryGameId);
-                            console.log('   Order#:', orderNumber);
-                            console.log('   Amount:', chargeAmount);
-                            console.log('   Time:', timeDisplay);
-                            console.log('   Total recharges for this user:', userRecharges.length);
-                        }
-                    } else if (index === 0) {
-                        console.log('❌ NO RECHARGE for gameId:', entryGameId);
                     }
+                    
+                    rechargeInfo = `
+                        <div class="recharge-details">
+                            <div class="recharge-id" title="Order: ${orderNumber}">${shortOrderNumber}</div>
+                            <div class="recharge-time">${timeDisplay}</div>
+                            <div class="recharge-amount"><strong>${amountDisplay}</strong></div>
+                        </div>
+                    `;
+                } catch (error) {
+                    console.error('❌ ERROR rendering recharge info:', error);
+                    rechargeInfo = '<span class="text-muted" style="font-size:0.85rem">Error loading recharge</span>';
                 }
-            } catch (error) {
-                console.error('❌ ERROR getting recharge info:', error);
-                rechargeInfo = '<span class="text-muted" style="font-size:0.7rem">Error loading recharge</span>';
             }
             
             // WhatsApp masked display
@@ -630,28 +605,71 @@ window.UnifiedPage = (function() {
     }
 
     function showTicketDetails(ticketNumber) {
-        const entry = currentData.entries.find(e => e.ticketNumber === ticketNumber);
-        if (!entry) return;
+        // Find entry in filtered entries (which are already validated)
+        let entry = filteredEntries.find(e => e.ticketNumber === ticketNumber);
+        
+        // If not found in filtered, search in all entries and validate it
+        if (!entry) {
+            entry = currentData.entries.find(e => e.ticketNumber === ticketNumber);
+            if (!entry) return;
+            
+            // Validate this single entry
+            if (currentData.allRecharges && currentData.allRecharges.length > 0) {
+                const validated = RechargeValidator.validateEntries([entry], currentData.allRecharges);
+                entry = validated[0];
+            }
+        }
         
         const modalContent = document.getElementById('ticketModalContent');
         if (!modalContent) return;
         
-        // ✅ VALIDATION STATUS - READ DIRECTLY FROM CSV (Column H - STATUS)
-        const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
-        const status = csvStatus;
-        const isCutoff = isEntryCutoff(entry);
-        const statusClass = { 'VALID': 'success', 'INVALID': 'danger', 'VÁLIDO': 'success', 'INVÁLIDO': 'danger' }[csvStatus] || 'warning';
-        const statusIcon = (status === 'VALID' || status === 'VÁLIDO') ? '✅' : (status === 'INVALID' || status === 'INVÁLIDO') ? '❌' : '⏳';
-        const statusText = (status === 'VALID' || status === 'VÁLIDO') ? 'VALID' : (status === 'INVALID' || status === 'INVÁLIDO') ? 'INVALID' : 'PENDING';
+        // ✅ VALIDATION STATUS FROM ADMIN LOGIC
+        const status = entry.validity || 'UNKNOWN';
+        const isCutoff = entry.cutoffFlag || false;
+        const reason = entry.invalidReasonCode;
         
-        const cutoffWarning = isCutoff ? '<br><span class="text-warning">⚠️ Registered after cutoff time (20:00 BRT)</span>' : '';
+        // Build validation banner with detailed explanation (like admin)
+        let statusHtml = '';
+        if (status === 'VALID') {
+            const rechargeIdShort = entry.boundRechargeId ? entry.boundRechargeId.substring(0, 16) + '...' : 'N/A';
+            statusHtml = `
+                <div style="padding:15px;background:#d4edda;border-radius:8px;border-left:4px solid #28a745;margin-bottom:20px;">
+                    <h3 style="color:#155724;margin-bottom:10px;">✅ TICKET IS VALID</h3>
+                    <p style="margin:0;">This is the first ticket created after recharge <strong>${rechargeIdShort}</strong>.</p>
+                </div>
+            `;
+        } else if (status === 'INVALID') {
+            const reasonText = RechargeValidator.getReasonCodeText(reason);
+            let extraHelp = '';
+            if (reason === 'INVALID_TICKET_BEFORE_RECHARGE') {
+                extraHelp = '<p style="margin-top:10px;font-size:13px;">💡 This ticket was created without a preceding recharge, or all recharges were already consumed by earlier tickets.</p>';
+            }
+            statusHtml = `
+                <div style="padding:15px;background:#f8d7da;border-radius:8px;border-left:4px solid #dc3545;margin-bottom:20px;">
+                    <h3 style="color:#721c24;margin-bottom:10px;">❌ TICKET IS INVALID</h3>
+                    <p style="margin:0;"><strong>Reason:</strong> ${reasonText}</p>
+                    ${extraHelp}
+                </div>
+            `;
+        } else {
+            statusHtml = `
+                <div style="padding:15px;background:#fff3cd;border-radius:8px;border-left:4px solid #ffc107;margin-bottom:20px;">
+                    <h3 style="color:#856404;margin-bottom:10px;">❓ VALIDITY UNKNOWN</h3>
+                    <p style="margin:0;">Upload recharge data to validate this ticket.</p>
+                </div>
+            `;
+        }
         
-        const statusHtml = `<div class="status-banner ${statusClass} mb-4">
-            <span class="status-banner-icon">${statusIcon}</span>
-            <span class="status-banner-text">
-                <strong>${statusText}</strong> - Status from CSV${cutoffWarning}
-            </span>
-        </div>`;
+        // Cutoff warning
+        let cutoffHtml = '';
+        if (isCutoff) {
+            cutoffHtml = `
+                <div style="padding:15px;background:#fff3cd;border-radius:8px;border-left:4px solid #ffc107;margin-bottom:20px;">
+                    <h3 style="color:#856404;margin-bottom:10px;">⚠️ CUTOFF TIME SHIFT DETECTED</h3>
+                    <p style="margin:0;">Recharge happened before 20:00:00, but ticket was created after 20:00:01. This ticket belongs to tomorrow's draw.</p>
+                </div>
+            `;
+        }
         
         // Render number badges
         const numbersHtml = entry.numbers.map(n => {
@@ -659,110 +677,56 @@ window.UnifiedPage = (function() {
             return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
         }).join('');
         
-        // RECHARGE INFORMATION - DIRECT MATCH BY GAME ID
-        let rechargeHtml = '<p class="text-muted">No recharge found for this Game ID</p>';
+        // BOUND RECHARGE INFORMATION (FROM VALIDATION)
+        let rechargeHtml = '<p style="color:#999;font-style:italic;">No recharge data available for this ticket.</p>';
         
-        // Find recharge directly by matching gameId
-        const entryGameId = entry.gameId;
-        if (entryGameId && currentData.allRecharges && currentData.allRecharges.length > 0) {
-            const userRecharges = currentData.allRecharges.filter(r => r.gameId === entryGameId);
+        if (entry.boundRechargeId) {
+            const orderNumber = entry.boundRechargeId;
+            const chargeAmount = entry.boundRechargeAmount || 0;
+            const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
             
-            if (userRecharges.length > 0) {
-                // Show ALL recharges for this user
-                rechargeHtml = '<div class="mb-3">';
-                
-                userRecharges.slice(0, 5).forEach((r, idx) => {
-                    const orderNumber = r.rechargeId || '-';
-                    const chargeAmount = r.amount || 0;
-                    const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
-                    
-                    let timeDisplay = '-';
-                    if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
-                        timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
-                            day: '2-digit', 
-                            month: '2-digit', 
-                            year: 'numeric', 
-                            hour: '2-digit', 
-                            minute: '2-digit', 
-                            second: '2-digit' 
-                        });
-                    } else if (r.rechargeTimeRaw) {
-                        timeDisplay = r.rechargeTimeRaw;
-                    }
-                    
-                    rechargeHtml += `
-                        <div class="ticket-info-grid mb-3" style="border-bottom: 1px solid var(--border-primary); padding-bottom: 12px;">
-                            <div class="ticket-info-item">
-                                <span class="label">💰 Amount ${idx === 0 ? '(Latest)' : ''}</span>
-                                <span class="value text-success"><strong>${amountDisplay}</strong></span>
-                            </div>
-                            <div class="ticket-info-item">
-                                <span class="label">📋 Order Number</span>
-                                <span class="value" style="font-size:0.7rem;word-break:break-all">${orderNumber}</span>
-                            </div>
-                            <div class="ticket-info-item">
-                                <span class="label">⏰ Recharge Time</span>
-                                <span class="value">${timeDisplay}</span>
-                            </div>
-                            <div class="ticket-info-item">
-                                <span class="label">🎮 Game ID</span>
-                                <span class="value">${r.gameId}</span>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                if (userRecharges.length > 5) {
-                    rechargeHtml += `<p class="text-muted text-center">... and ${userRecharges.length - 5} more recharges</p>`;
+            let timeDisplay = entry.boundRechargeTime || '-';
+            // Try to parse and format
+            if (timeDisplay && timeDisplay !== '-') {
+                const parsed = RechargeValidator.parseBrazilTime(timeDisplay);
+                if (parsed) {
+                    timeDisplay = AdminCore.formatBrazilDateTime(parsed, { 
+                        day: '2-digit', 
+                        month: '2-digit', 
+                        year: 'numeric', 
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        second: '2-digit' 
+                    });
                 }
-                
-                rechargeHtml += '</div>';
             }
+            
+            rechargeHtml = `
+                <table style="width:100%;">
+                    <tr><td><strong>Recharge ID:</strong></td><td>${orderNumber}</td></tr>
+                    <tr><td><strong>Recharge Time:</strong></td><td>${timeDisplay}</td></tr>
+                    <tr><td><strong>Recharge Amount:</strong></td><td>${amountDisplay}</td></tr>
+                </table>
+            `;
         }
         
         modalContent.innerHTML = `
             ${statusHtml}
+            ${cutoffHtml}
             
-            <h4 class="mb-3">📋 Ticket Information</h4>
-            <div class="ticket-info-grid mb-4">
-                <div class="ticket-info-item">
-                    <span class="label">Ticket Number</span>
-                    <span class="value">${entry.ticketNumber}</span>
-                </div>
-                <div class="ticket-info-item">
-                    <span class="label">Game ID</span>
-                    <span class="value"><strong>${entry.gameId}</strong></span>
-                </div>
-                <div class="ticket-info-item">
-                    <span class="label">WhatsApp</span>
-                    <span class="value">${entry.whatsapp || '-'}</span>
-                </div>
-                <div class="ticket-info-item">
-                    <span class="label">Platform</span>
-                    <span class="value"><span class="platform-badge ${(entry.platform || 'POPN1').toLowerCase()}">${entry.platform || 'POPN1'}</span></span>
-                </div>
-                <div class="ticket-info-item">
-                    <span class="label">Contest</span>
-                    <span class="value"><span class="badge badge-info">${entry.contest}</span></span>
-                </div>
-                <div class="ticket-info-item">
-                    <span class="label">Draw Date</span>
-                    <span class="value">${entry.drawDate || '-'}</span>
-                </div>
-                <div class="ticket-info-item">
-                    <span class="label">Registered</span>
-                    <span class="value">${entry.parsedDate ? AdminCore.formatBrazilDateTime(entry.parsedDate) : entry.timestamp}</span>
-                </div>
-                <div class="ticket-info-item">
-                    <span class="label">Original Status</span>
-                    <span class="value">${entry.status || 'N/A'}</span>
-                </div>
-            </div>
+            <h3 style="margin-bottom:15px;">📋 Ticket Information</h3>
+            <table style="width:100%;margin-bottom:20px;">
+                <tr><td><strong>Game ID:</strong></td><td>${entry.gameId}</td></tr>
+                <tr><td><strong>Platform:</strong></td><td>${entry.platform}</td></tr>
+                <tr><td><strong>WhatsApp:</strong></td><td>${entry.whatsapp}</td></tr>
+                <tr><td><strong>Ticket #:</strong></td><td>${entry.ticketNumber}</td></tr>
+                <tr><td><strong>Registration Time:</strong></td><td>${entry.timestamp}</td></tr>
+                <tr><td><strong>Contest:</strong></td><td>${entry.contest}</td></tr>
+                <tr><td><strong>Draw Date:</strong></td><td>${entry.drawDate}</td></tr>
+                <tr><td><strong>Chosen Numbers:</strong></td><td><strong>${entry.numbers.join(', ')}</strong></td></tr>
+            </table>
             
-            <h4 class="mb-3">🎲 Selected Numbers</h4>
-            <div class="numbers-display mb-4">${numbersHtml}</div>
-            
-            <h4 class="mb-3">💳 Linked Recharge</h4>
+            <h3 style="margin-bottom:15px;">💳 Bound Recharge Information</h3>
             ${rechargeHtml}
         `;
         
@@ -775,18 +739,26 @@ window.UnifiedPage = (function() {
             return;
         }
         
-        const headers = ['Status', 'Date/Time', 'Platform', 'Game ID', 'Numbers', 'Contest', 'Ticket #'];
+        const headers = ['Validity', 'Date/Time', 'Platform', 'Game ID', 'WhatsApp', 'Numbers', 
+                         'Draw Date', 'Contest', 'Ticket #', 'Bound Recharge ID', 
+                         'Recharge Time', 'Recharge Amount', 'Invalid Reason', 'Cutoff Flag'];
+        
         const rows = filteredEntries.map(entry => {
-            // ✅ READ STATUS DIRECTLY FROM CSV (Column H - STATUS)
-            const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
             return [
-                csvStatus,
+                entry.validity || 'UNKNOWN',
                 entry.timestamp,
                 entry.platform,
                 entry.gameId,
+                entry.whatsapp || '',
                 entry.numbers.join(', '),
+                entry.drawDate || '',
                 entry.contest,
-                entry.ticketNumber
+                entry.ticketNumber,
+                entry.boundRechargeId || '',
+                entry.boundRechargeTime || '',
+                entry.boundRechargeAmount || '',
+                entry.invalidReasonCode || '',
+                entry.cutoffFlag ? 'YES' : 'NO'
             ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
         });
         
@@ -794,10 +766,10 @@ window.UnifiedPage = (function() {
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `entries_${AdminCore.getBrazilDateString(new Date())}.csv`;
+        link.download = `entries_validated_${AdminCore.getBrazilDateString(new Date())}.csv`;
         link.click();
         
-        AdminCore.showToast(`${filteredEntries.length} entries exported`, 'success');
+        AdminCore.showToast(`${filteredEntries.length} validated entries exported`, 'success');
     }
 
     // ============================================
@@ -1128,19 +1100,56 @@ window.UnifiedPage = (function() {
         
         // Entries filters
         const debouncedEntriesFilter = AdminCore.debounce(applyEntriesFilters, 300);
+        // Add sortable column header event listeners
+        document.querySelectorAll('#entriesTable th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const col = th.getAttribute('data-sort');
+                if (sortColumn === col) {
+                    // Toggle direction if same column
+                    sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    // New column, default to ascending
+                    sortColumn = col;
+                    sortDirection = 'asc';
+                }
+                
+                // Update header indicators
+                document.querySelectorAll('#entriesTable th[data-sort]').forEach(h => {
+                    const text = h.textContent.replace(/ [↑↓↕]/g, '');
+                    if (h === th) {
+                        h.textContent = text + (sortDirection === 'asc' ? ' ↑' : ' ↓');
+                    } else {
+                        h.textContent = text + ' ↕';
+                    }
+                });
+                
+                applyEntriesFilters();
+            });
+        });
+        
         document.getElementById('filterGameId')?.addEventListener('input', (e) => { entriesFilters.gameId = e.target.value; debouncedEntriesFilter(); });
         document.getElementById('filterWhatsapp')?.addEventListener('input', (e) => { entriesFilters.whatsapp = e.target.value; debouncedEntriesFilter(); });
         document.getElementById('filterContest')?.addEventListener('change', (e) => { entriesFilters.contest = e.target.value; applyEntriesFilters(); });
         document.getElementById('filterValidity')?.addEventListener('change', (e) => { entriesFilters.validity = e.target.value; applyEntriesFilters(); });
-        document.getElementById('sortBy')?.addEventListener('change', (e) => { sortBy = e.target.value; applyEntriesFilters(); });
+        document.getElementById('filterDrawDate')?.addEventListener('change', (e) => { entriesFilters.drawDate = e.target.value; applyEntriesFilters(); });
+        document.getElementById('filterCutoffFlag')?.addEventListener('change', (e) => { entriesFilters.cutoffFlag = e.target.value; applyEntriesFilters(); });
         document.getElementById('btnClearFilters')?.addEventListener('click', () => {
-            entriesFilters = { gameId: '', whatsapp: '', contest: '', validity: 'all' };
-            sortBy = 'date-desc';
+            entriesFilters = { gameId: '', whatsapp: '', contest: '', validity: 'all', drawDate: '', cutoffFlag: '' };
+            sortColumn = 'timestamp';
+            sortDirection = 'desc';
             document.getElementById('filterGameId').value = '';
             document.getElementById('filterWhatsapp').value = '';
             document.getElementById('filterContest').value = '';
             document.getElementById('filterValidity').value = 'all';
-            document.getElementById('sortBy').value = 'date-desc';
+            document.getElementById('filterDrawDate').value = '';
+            document.getElementById('filterCutoffFlag').value = '';
+            
+            // Reset header indicators
+            document.querySelectorAll('#entriesTable th[data-sort]').forEach(h => {
+                const text = h.textContent.replace(/ [↑↓↕]/g, '');
+                h.textContent = text + ' ↕';
+            });
+            
             applyEntriesFilters();
         });
         document.getElementById('btnExportCSV')?.addEventListener('click', exportEntriesCSV);

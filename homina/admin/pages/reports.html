@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - Lottery Admin</title>
+    <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+    <script src="../auth.js"></script>
+    <script>ensureAuthenticated();</script>
+    <header>
+        <div class="container">
+            <h1>Q2 ADM DASHBOARD</h1>
+            <button id="refreshBtn" class="btn-refresh">🔄 REFRESH 🔄</button>
+        </div>
+    </header>
+
+    <nav class="navbar">
+        <div class="container">
+            <a href="../index.html">Dashboard</a>
+            <a href="entries.html">All Entries</a>
+            <a href="results.html">Contest Results</a>
+            <a href="winners.html">Winners</a>
+            <a href="reports.html" class="active">Reports</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <div id="loadingIndicator" class="loading">Loading data...</div>
+
+        <div class="section">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Live data • RESULT sheet</p>
+                    <h2>📊 System Report</h2>
+                </div>
+                <div class="actions-row">
+                    <button id="refreshBtn" class="btn-refresh">🔄 Refresh</button>
+                </div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card tone-primary">
+                    <div class="stat-label">Total entries</div>
+                    <div class="stat-number" id="reportTotalEntries">0</div>
+                </div>
+                <div class="stat-card tone-green">
+                    <div class="stat-label">Total winners</div>
+                    <div class="stat-number" id="reportTotalWinners">0</div>
+                </div>
+                <div class="stat-card tone-blue">
+                    <div class="stat-label">Win rate</div>
+                    <div class="stat-number" id="reportWinRate">0%</div>
+                </div>
+                <div class="stat-card tone-neutral">
+                    <div class="stat-label">Contests completed</div>
+                    <div class="stat-number" id="reportCompletedContests">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🏆 Winners Breakdown by Contest</h2>
+            <div id="contestWinnersBreakdown"></div>
+        </div>
+
+        <div class="section">
+            <h2>📅 Entries Timeline</h2>
+            <div id="entriesTimeline"></div>
+        </div>
+
+        <div class="section">
+            <h2>📞 Top Players (by WhatsApp)</h2>
+            <div class="table-container">
+                <table id="topPlayersTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>WhatsApp</th>
+                            <th>Total Entries</th>
+                            <th>Total Wins</th>
+                            <th>Win Rate</th>
+                            <th>Best Prize</th>
+                        </tr>
+                    </thead>
+                    <tbody id="topPlayersTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🎯 Number Frequency Analysis</h2>
+            <div style="margin-bottom: 20px;">
+                <button id="showMostFrequentBtn" class="btn-primary">Most Frequent Numbers</button>
+                <button id="showLeastFrequentBtn" class="btn-warning">Least Frequent Numbers</button>
+            </div>
+            <div id="numberFrequencyChart"></div>
+        </div>
+
+        <div class="section">
+            <h2>📥 Export</h2>
+            <div class="actions-row" style="gap:10px; flex-wrap: wrap;">
+                <button id="exportFullReportBtn" class="btn-success">📄 Full Report (CSV)</button>
+                <button id="exportWinnersReportBtn" class="btn-success">🏆 Winners (CSV)</button>
+                <button id="exportContestReportBtn" class="btn-success">🎲 Contest (CSV)</button>
+                <button id="printReportBtn" class="btn-primary">🖨️ Print</button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>Last Updated: <span id="lastUpdate">Never</span></p>
+        </div>
+    </footer>
+
+    <script src="../results-fetcher.js"></script>
+    <script src="../data-fetcher.js"></script>
+    <script src="../validator.js"></script>
+    <script>
+        async function init() {
+            showLoading(true);
+            try {
+                await dataFetcher.fetchData();
+                const results = await resultsFetcher.fetchResults();
+                validator.setResults(results);
+                generateReports();
+                updateLastUpdateTime();
+                showLoading(false);
+                setupEventListeners();
+            } catch (error) {
+                console.error('Failed to load data:', error);
+                showLoading(false);
+            }
+        }
+
+        function generateReports() {
+            const allEntries = dataFetcher.getAllEntries();
+            const allWinners = validator.getWinners(allEntries);
+            const results = validator.getAllResults();
+            
+            document.getElementById('reportTotalEntries').textContent = allEntries.length;
+            document.getElementById('reportTotalWinners').textContent = allWinners.length;
+            const winRate = allEntries.length > 0 ? ((allWinners.length / allEntries.length) * 100).toFixed(2) : 0;
+            document.getElementById('reportWinRate').textContent = winRate + '%';
+            document.getElementById('reportCompletedContests').textContent = results.length;
+            
+            generateContestWinnersBreakdown(allEntries, results, allWinners);
+            generateEntriesTimeline(allEntries);
+            generateTopPlayers(allEntries, allWinners);
+            generateNumberFrequency(allEntries);
+        }
+
+        function generateContestWinnersBreakdown(entries, results, winners) {
+            const container = document.getElementById('contestWinnersBreakdown');
+            container.innerHTML = '';
+            
+            if (results.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">No contest results configured yet</p>';
+                return;
+            }
+            
+            results.forEach(result => {
+                const contestEntries = entries.filter(e => e.contest === result.contest && e.drawDate === result.drawDate);
+                const contestWinners = winners.filter(w => w.contest === result.contest && w.drawDate === result.drawDate);
+                const counts = {1:0,2:0,3:0,4:0,5:0};
+                contestWinners.forEach(w => { counts[w.validation.matches] = (counts[w.validation.matches] || 0) + 1; });
+
+                const card = document.createElement('div');
+                card.className = 'breakdown-card';
+                card.innerHTML = `
+                    <div class="breakdown-head">
+                        <div>
+                            <p class="eyebrow">Contest ${result.contest}</p>
+                            <h3>${result.drawDate}</h3>
+                        </div>
+                        <div class="pill">${contestEntries.length} entradas</div>
+                    </div>
+                    <p class="muted">Números: ${result.winningNumbers.join(', ')}</p>
+                    <div class="mini-grid">
+                        <div class="mini-stat"><span>5 acertos</span><strong>${counts[5] || 0}</strong></div>
+                        <div class="mini-stat"><span>4 acertos</span><strong>${counts[4] || 0}</strong></div>
+                        <div class="mini-stat"><span>3 acertos</span><strong>${counts[3] || 0}</strong></div>
+                        <div class="mini-stat"><span>2 acertos</span><strong>${counts[2] || 0}</strong></div>
+                        <div class="mini-stat"><span>1 acerto</span><strong>${counts[1] || 0}</strong></div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function generateEntriesTimeline(entries) {
+            const container = document.getElementById('entriesTimeline');
+            container.innerHTML = '';
+            
+            const dateGroups = {};
+            entries.forEach(entry => {
+                const date = entry.drawDate;
+                if (!dateGroups[date]) {
+                    dateGroups[date] = 0;
+                }
+                dateGroups[date]++;
+            });
+            
+            const sortedDates = Object.keys(dateGroups).sort();
+            
+            sortedDates.forEach(date => {
+                const count = dateGroups[date];
+                const maxCount = Math.max(...Object. values(dateGroups));
+                const barWidth = (count / maxCount) * 100;
+                
+                const bar = document.createElement('div');
+                bar.style. cssText = 'margin-bottom: 15px;';
+                bar.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <strong>${date}</strong>
+                        <span>${count} entries</span>
+                    </div>
+                    <div style="background: #e0e0e0; height: 30px; border-radius: 5px; overflow: hidden;">
+                        <div style="background: linear-gradient(90deg, #1e3c72, #2a5298); width: ${barWidth}%; height: 100%; display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; color: white; font-weight: bold; transition: width 0.3s;">
+                            ${count}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(bar);
+            });
+        }
+
+        function generateTopPlayers(entries, winners) {
+            const tbody = document.getElementById('topPlayersTableBody');
+            tbody.innerHTML = '';
+            
+            const playerStats = {};
+            
+            entries.forEach(entry => {
+                const phone = entry.whatsapp || 'N/A';
+                if (!playerStats[phone]) {
+                    playerStats[phone] = {
+                        totalEntries: 0,
+                        totalWins: 0,
+                        bestPrize: 0
+                    };
+                }
+                playerStats[phone].totalEntries++;
+            });
+            
+            winners.forEach(winner => {
+                const phone = winner.whatsapp || 'N/A';
+                if (playerStats[phone]) {
+                    playerStats[phone].totalWins++;
+                    if (winner.validation.matches > playerStats[phone].bestPrize) {
+                        playerStats[phone].bestPrize = winner.validation.matches;
+                    }
+                }
+            });
+            
+            const sortedPlayers = Object.entries(playerStats)
+                .sort((a, b) => b[1].totalEntries - a[1].totalEntries)
+                .slice(0, 20);
+            
+            sortedPlayers.forEach(([phone, stats], index) => {
+                const winRate = ((stats.totalWins / stats. totalEntries) * 100).toFixed(2);
+                const bestPrizeText = stats.bestPrize === 5 ? '🏆 Grand Prize' : 
+                                      stats.bestPrize === 4 ? '🥈 2nd Prize' :
+                                      stats.bestPrize === 3 ?  '🥉 3rd Prize' :
+                                      stats.bestPrize === 2 ? '🎁 Consolation' : 'None';
+                
+                const row = tbody.insertRow();
+                row. innerHTML = `
+                    <td><strong>${index + 1}</strong></td>
+                    <td>${phone}</td>
+                    <td>${stats.totalEntries}</td>
+                    <td>${stats.totalWins}</td>
+                    <td>${winRate}%</td>
+                    <td>${bestPrizeText}</td>
+                `;
+            });
+        }
+
+        function generateNumberFrequency(entries) {
+            const container = document. getElementById('numberFrequencyChart');
+            
+            const frequency = {};
+            for (let i = 1; i <= 80; i++) {
+                frequency[i] = 0;
+            }
+            
+            entries.forEach(entry => {
+                entry.chosenNumbers.forEach(num => {
+                    frequency[num]++;
+                });
+            });
+            
+            displayNumberFrequency(frequency, 'most');
+        }
+
+        function displayNumberFrequency(frequency, mode) {
+            const container = document.getElementById('numberFrequencyChart');
+            container.innerHTML = '';
+            
+            const sorted = Object.entries(frequency)
+                .sort((a, b) => mode === 'most' ? b[1] - a[1] :  a[1] - b[1])
+                .slice(0, 20);
+            
+            const maxFreq = Math.max(...sorted.map(([_, freq]) => freq));
+            
+            sorted.forEach(([number, freq]) => {
+                const barWidth = (freq / maxFreq) * 100;
+                
+                const bar = document.createElement('div');
+                bar.style. cssText = 'margin-bottom: 10px;';
+                bar.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                        <strong>Number ${number}</strong>
+                        <span>${freq} times</span>
+                    </div>
+                    <div style="background: #e0e0e0; height: 25px; border-radius: 5px; overflow: hidden;">
+                        <div style="background: ${mode === 'most' ? '#4CAF50' : '#ff9800'}; width: ${barWidth}%; height: 100%; display: flex; align-items: center; padding-left: 10px; color: white; font-weight: bold;">
+                            ${freq}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(bar);
+            });
+        }
+
+        function exportFullReport() {
+            const entries = dataFetcher.getAllEntries();
+            let csv = 'Registration Date/Time,Game ID,WhatsApp,Chosen Numbers,Draw Date,Contest,Ticket #,Status\n';
+            
+            entries.forEach(entry => {
+                csv += `"${entry.registrationDateTime}","${entry.gameId}","${entry.whatsapp}","${entry.chosenNumbers. join(', ')}","${entry.drawDate}","${entry. contest}","${entry.ticketNumber}","${entry.status}"\n`;
+            });
+            
+            downloadCSV(csv, 'full_report');
+        }
+
+        function exportWinnersReport() {
+            const entries = dataFetcher.getAllEntries();
+            const winners = validator.getWinners(entries);
+            
+            let csv = 'Prize,Matches,Game ID,WhatsApp,Chosen Numbers,Winning Numbers,Matched Numbers,Draw Date,Contest\n';
+            
+            winners. forEach(winner => {
+                const val = winner.validation;
+                csv += `"${val.prizeTier. tier}","${val.matches}","${winner.gameId}","${winner.whatsapp}","${winner.chosenNumbers.join(', ')}","${val.winningNumbers.join(', ')}","${val.matchedNumbers.join(', ')}","${winner.drawDate}","${winner.contest}"\n`;
+            });
+            
+            downloadCSV(csv, 'winners_report');
+        }
+
+        function exportContestReport() {
+            const results = validator.getAllResults();
+            let csv = 'Contest,Draw Date,Winning Numbers,Total Entries,5 matches,4 matches,3 matches,2 matches,1 match\n';
+            
+            results.forEach(result => {
+                const entries = dataFetcher.getAllEntries().filter(e => e.contest === result.contest && e.drawDate === result.drawDate);
+                const winners = validator.getWinnersByContest(entries, result.contest);
+                const counts = {1:0,2:0,3:0,4:0,5:0};
+                winners.forEach(w => { counts[w.validation.matches] = (counts[w.validation.matches] || 0) + 1; });
+                
+                csv += `"${result.contest}","${result.drawDate}","${result.winningNumbers.join(', ')}","${entries.length}","${counts[5]||0}","${counts[4]||0}","${counts[3]||0}","${counts[2]||0}","${counts[1]||0}"\n`;
+            });
+            
+            downloadCSV(csv, 'contest_report');
+        }
+
+        function downloadCSV(csv, filename) {
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document. createElement('a');
+            a.href = url;
+            a. download = `${filename}_${new Date().toISOString()}.csv`;
+            a.click();
+        }
+
+        function printReport() {
+            window.print();
+        }
+
+        function setupEventListeners() {
+            document.getElementById('refreshBtn').addEventListener('click', init);
+            document.getElementById('exportFullReportBtn').addEventListener('click', exportFullReport);
+            document. getElementById('exportWinnersReportBtn').addEventListener('click', exportWinnersReport);
+            document. getElementById('exportContestReportBtn').addEventListener('click', exportContestReport);
+            document.getElementById('printReportBtn').addEventListener('click', printReport);
+            
+            document.getElementById('showMostFrequentBtn').addEventListener('click', () => {
+                const entries = dataFetcher. getAllEntries();
+                const frequency = {};
+                for (let i = 1; i <= 80; i++) frequency[i] = 0;
+                entries.forEach(entry => entry.chosenNumbers.forEach(num => frequency[num]++));
+                displayNumberFrequency(frequency, 'most');
+            });
+            
+            document.getElementById('showLeastFrequentBtn').addEventListener('click', () => {
+                const entries = dataFetcher.getAllEntries();
+                const frequency = {};
+                for (let i = 1; i <= 80; i++) frequency[i] = 0;
+                entries. forEach(entry => entry.chosenNumbers.forEach(num => frequency[num]++));
+                displayNumberFrequency(frequency, 'least');
+            });
+        }
+
+        function showLoading(show) {
+            const loading = document.getElementById('loadingIndicator');
+            if (loading) {
+                loading.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        function updateLastUpdateTime() {
+            const lastUpdate = document.getElementById('lastUpdate');
+            if (dataFetcher.lastFetchTime) {
+                lastUpdate.textContent = dataFetcher.lastFetchTime.toLocaleString('pt-BR');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

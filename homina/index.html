@@ -341,14 +341,17 @@
                             </select>
                         </div>
                         <div class="filter-group">
-                            <label>Sort By</label>
-                            <select id="sortBy">
-                                <option value="date-desc">Date (Newest First)</option>
-                                <option value="date-asc">Date (Oldest First)</option>
-                                <option value="cutoff-yes">Cutoff First</option>
-                                <option value="cutoff-no">No Cutoff First</option>
-                                <option value="status-valid">Valid First</option>
-                                <option value="status-invalid">Invalid First</option>
+                            <label>Draw Date</label>
+                            <select id="filterDrawDate">
+                                <option value="">All Dates</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Cutoff Flag</label>
+                            <select id="filterCutoffFlag">
+                                <option value="">All</option>
+                                <option value="true">Cutoff Only</option>
+                                <option value="false">No Cutoff</option>
                             </select>
                         </div>
                         <div class="filter-actions">
@@ -363,15 +366,15 @@
                             <table class="table">
                             <thead>
                                 <tr>
-                                    <th>Status</th>
-                                    <th>Date/Time</th>
-                                    <th>Platform</th>
-                                    <th>Game ID</th>
-                                    <th>WhatsApp</th>
-                                    <th>Numbers</th>
-                                    <th>Draw Date</th>
-                                    <th>Contest</th>
-                                    <th>Ticket #</th>
+                                    <th data-sort="validity" style="cursor:pointer" title="Click to sort">Status ↕</th>
+                                    <th data-sort="timestamp" style="cursor:pointer" title="Click to sort">Date/Time ↕</th>
+                                    <th data-sort="platform" style="cursor:pointer" title="Click to sort">Platform ↕</th>
+                                    <th data-sort="gameId" style="cursor:pointer" title="Click to sort">Game ID ↕</th>
+                                    <th data-sort="whatsapp" style="cursor:pointer" title="Click to sort">WhatsApp ↕</th>
+                                    <th data-sort="numbers">Numbers</th>
+                                    <th data-sort="drawDate" style="cursor:pointer" title="Click to sort">Draw Date ↕</th>
+                                    <th data-sort="contest" style="cursor:pointer" title="Click to sort">Contest ↕</th>
+                                    <th data-sort="ticketNumber" style="cursor:pointer" title="Click to sort">Ticket # ↕</th>
                                     <th>Recharge Info</th>
                                     <th>Actions</th>
                                 </tr>

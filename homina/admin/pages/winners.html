@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>WINNERS - Pop Sorte</title>
+        <link rel="stylesheet" href="../styles.css">
+    </head>
+    <body class="app-shell">
+        <script src="../auth.js"></script>
+        <script>ensureAuthenticated();</script>
+
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-mark">Q2</div>
+                <div>
+                    <p class="eyebrow">Admin</p>
+                    <strong>Operations</strong>
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <p class="sidebar-label">Overview</p>
+                <a href="../index.html">Dashboard</a>
+            </div>
+            <div class="sidebar-section">
+                <p class="sidebar-label">Operations</p>
+                <a href="entries.html">Entries</a>
+                <a href="results.html">Results</a>
+                <a href="winners.html" class="active">Winners</a>
+            </div>
+            <div class="sidebar-footer">
+                <button class="btn-ghost logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </aside>
+
+        <div class="main-panel">
+            <div class="topbar">
+                <div>
+                    <p class="eyebrow">Admin Console</p>
+                    <h1>Winners</h1>
+                    <p class="muted" id="accountBanner">Logged in as: —</p>
+                </div>
+                <div class="actions-row">
+                    <button id="refreshBtn" class="btn-refresh">Refresh</button>
+                    <button class="btn-danger ghost" onclick="logout()">Logout</button>
+                </div>
+            </div>
+
+            <main class="content">
+                <div id="loadingIndicator" class="loading">Loading data...</div>
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <div>
+                            <p class="eyebrow">Live SRC-RESULT sheet (read-only)</p>
+                            <h2>SUMMARY</h2>
+                        </div>
+                        <div class="actions-row">
+                            <button id="refreshBtnSummary" class="btn-refresh">Refresh</button>
+                        </div>
+                    </div>
+                    <div class="stats-grid" id="summaryGrid">
+                        <div class="stat-card tone-gold">
+                            <div class="stat-label">🏆 5 HITS</div>
+                            <div class="stat-number" id="sum5">0</div>
+                        </div>
+                        <div class="stat-card tone-silver">
+                            <div class="stat-label">🥈 4 HITS</div>
+                            <div class="stat-number" id="sum4">0</div>
+                        </div>
+                        <div class="stat-card tone-bronze">
+                            <div class="stat-label">🥉 3 HITS</div>
+                            <div class="stat-number" id="sum3">0</div>
+                        </div>
+                        <div class="stat-card tone-green">
+                            <div class="stat-label">🎯 2 HITS</div>
+                            <div class="stat-number" id="sum2">0</div>
+                        </div>
+                        <div class="stat-card tone-neutral">
+                            <div class="stat-label">✨ 1 HITS</div>
+                            <div class="stat-number" id="sum1">0</div>
+                        </div>
+                        <div class="stat-card tone-primary">
+                            <div class="stat-label">TOTAL WINNERS</div>
+                            <div class="stat-number" id="sumTotal">0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section" id="ticketCreatorsSection">
+                    <div class="section-header">
+                        <div>
+                            <p class="eyebrow">Ticket creators (unique)</p>
+                            <h2>Today vs Yesterday</h2>
+                            <p class="muted" style="margin-top: 6px;">Unique game IDs that created ≥ 1 ticket on that day. Window: last 7 days only. This is per total of the day ya, not per period.</p>
+                        </div>
+                    </div>
+                    <div id="ticketCreatorsChart" class="comparison-chart" style="display:flex; flex-direction:column; gap:12px;">
+                        <div class="chart-bars" style="display:flex; gap:14px; align-items:flex-end; min-height:120px;">
+                            <div class="bar" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;">
+                                <div class="bar-outer" style="width:100%; background:#e5e7eb; border-radius:8px; height:100px; display:flex; align-items:flex-end;">
+                                    <div id="todayBarFill" style="width:100%; background:linear-gradient(180deg,#1e3c72,#2a5298); border-radius:8px; height:0%; transition:height 0.3s ease;"></div>
+                                </div>
+                                <div class="bar-label" style="text-align:center;">
+                                    <div id="todayCount" style="font-weight:700; font-size:18px;">0</div>
+                                    <div class="muted" style="font-size:13px;">Today</div>
+                                </div>
+                            </div>
+                            <div class="bar" style="flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;">
+                                <div class="bar-outer" style="width:100%; background:#e5e7eb; border-radius:8px; height:100px; display:flex; align-items:flex-end;">
+                                    <div id="yesterdayBarFill" style="width:100%; background:linear-gradient(180deg,#6b7280,#9ca3af); border-radius:8px; height:0%; transition:height 0.3s ease;"></div>
+                                </div>
+                                <div class="bar-label" style="text-align:center;">
+                                    <div id="yesterdayCount" style="font-weight:700; font-size:18px;">0</div>
+                                    <div class="muted" style="font-size:13px;">Yesterday</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="muted" style="font-size:13px;">Counts are unique game IDs with ≥ 1 ticket on that date (last 7 days window).</div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <div>
+                            <p class="eyebrow">Filters</p>
+                            <h2>Filter Winners</h2>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <div class="filter-grid">
+                            <div class="filter-item">
+                                <label>CONCURSO</label>
+                                <select id="filterContest">
+                                    <option value="">All Contests</option>
+                                </select>
+                            </div>
+                            <div class="filter-item">
+                                <label>DRAW DATE</label>
+                                <select id="filterDrawDate">
+                                    <option value="">All Dates</option>
+                                </select>
+                            </div>
+                            <div class="filter-item">
+                                <label>PRIZE LEVEL</label>
+                                <select id="filterPrizeTier">
+                                    <option value="">All</option>
+                                    <option value="5">5 matches</option>
+                                    <option value="4">4 matches</option>
+                                    <option value="3">3 matches</option>
+                                    <option value="2">2 matches</option>
+                                    <option value="1">1 match</option>
+                                </select>
+                            </div>
+                            <div class="filter-item">
+                                <label>WHATSAPP</label>
+                                <input type="text" id="filterWhatsApp" placeholder="Search WhatsApp">
+                            </div>
+                        </div>
+                        <div class="actions-row" style="margin-top: 15px; flex-wrap: wrap;">
+                            <button id="validateBtn" class="btn-primary">Reload Winners</button>
+                            <button id="exportWinnersBtn" class="btn-success">Export Winners</button>
+                            <button id="clearFiltersBtn" class="btn-warning">Clear Filters</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">
+                        <div>
+                            <p class="eyebrow">Qualified entries</p>
+                            <h2>Winners Table</h2>
+                        </div>
+                    </div>
+
+                    <div id="noResultsMessage" style="display: none; text-align: center; padding: 32px;" class="muted">
+                        <h3>⚠️ No Results Configured</h3>
+                        <p>Please add contest results first in the <a href="results.html">Contest Results</a> page.</p>
+                    </div>
+
+                    <div id="noWinnersMessage" style="display: none; text-align: center; padding: 32px;" class="muted">
+                        <h3>NO WINNERS FOUND</h3>
+                        <p>No entries matched 1 or more numbers for the selected criteria.</p>
+                    </div>
+
+                    <div class="table-container compact" id="winnersTableContainer">
+                        <table id="winnersTable">
+                            <colgroup>
+                                <col style="min-width: 140px;">
+                                <col style="min-width: 90px;">
+                                <col style="min-width: 170px;">
+                                <col style="min-width: 140px;">
+                                <col style="min-width: 160px;">
+                                <col style="min-width: 220px;">
+                                <col style="min-width: 200px;">
+                                <col style="min-width: 200px;">
+                                <col style="min-width: 140px;">
+                                <col style="min-width: 120px;">
+                                <col style="min-width: 140px;">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>PRIZE</th>
+                                    <th>MATCHES</th>
+                                    <th>REGISTRATION</th>
+                                    <th>GAME ID</th>
+                                    <th>WHATSAPP</th>
+                                    <th>CHOSEN NUMBERS</th>
+                                    <th>WINNING NUMBERS</th>
+                                    <th>MATCHED NUMBERS</th>
+                                    <th>DRAW DATE</th>
+                                    <th>CONCURSO</th>
+                                    <th>TICKET #</th>
+                                </tr>
+                            </thead>
+                            <tbody id="winnersTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+
+            <footer class="footer-bar">
+                <p>Last Updated: <span id="lastUpdate">Never</span></p>
+            </footer>
+        </div>
+
+        <script src="../results-fetcher.js"></script>
+        <script src="../data-fetcher.js"></script>
+        <script src="../validator.js"></script>
+        <script>
+            let allWinners = [];
+            let filteredWinners = [];
+            let listenersAttached = false;
+            let lastTicketCreatorsSnapshot = { today: 0, yesterday: 0, max: 1 };
+
+            async function init() {
+                showLoading(true);
+                try {
+                    await dataFetcher.fetchData();
+                    const results = await resultsFetcher.fetchResults();
+                    validator.setResults(results);
+                    populateFilters();
+                    validateAndDisplayWinners();
+                    renderTicketCreatorsComparison();
+                    updateLastUpdateTime();
+                    setAccountBanner();
+                    attachListenersOnce();
+                    clearError();
+                } catch (error) {
+                    showError('Failed to load data: ' + error.message);
+                } finally {
+                    showLoading(false);
+                }
+            }
+
+            function attachListenersOnce() {
+                if (listenersAttached) return;
+                setupEventListeners();
+                listenersAttached = true;
+            }
+
+            function dateKeyFromString(dateString) {
+                if (!dateString) return null;
+                const parsed = new Date(dateString);
+                if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+                const normalized = dateString.replace(' ', 'T');
+                const retry = new Date(normalized);
+                return Number.isNaN(retry.getTime()) ? null : retry.toISOString().slice(0, 10);
+            }
+
+            function renderTicketCreatorsComparison() {
+                const entries = dataFetcher.getAllEntries();
+                const byDate = {};
+
+                entries.forEach(entry => {
+                    const key = dateKeyFromString(entry.registrationDateTime);
+                    if (!key) return;
+                    if (!byDate[key]) byDate[key] = new Set();
+                    byDate[key].add(entry.gameId);
+                });
+
+                const allDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+                const last7 = allDates.slice(0, 7);
+
+                const todayKey = new Date();
+                const yesterdayKey = new Date();
+                yesterdayKey.setDate(todayKey.getDate() - 1);
+                const todayISO = todayKey.toISOString().slice(0, 10);
+                const yesterdayISO = yesterdayKey.toISOString().slice(0, 10);
+
+                const todayCount = byDate[todayISO] ? byDate[todayISO].size : 0;
+                const yesterdayCount = byDate[yesterdayISO] ? byDate[yesterdayISO].size : 0;
+
+                const maxCount = Math.max(todayCount, yesterdayCount, 1);
+                lastTicketCreatorsSnapshot = { today: todayCount, yesterday: yesterdayCount, max: maxCount };
+
+                const todayBar = document.getElementById('todayBarFill');
+                const yesterdayBar = document.getElementById('yesterdayBarFill');
+                const todayLabel = document.getElementById('todayCount');
+                const yesterdayLabel = document.getElementById('yesterdayCount');
+
+                if (todayBar && yesterdayBar && todayLabel && yesterdayLabel) {
+                    todayLabel.textContent = todayCount;
+                    yesterdayLabel.textContent = yesterdayCount;
+                    todayBar.style.height = ((todayCount / maxCount) * 100).toFixed(0) + '%';
+                    yesterdayBar.style.height = ((yesterdayCount / maxCount) * 100).toFixed(0) + '%';
+                }
+
+                renderTicketCreatorsFootnote(last7, byDate);
+            }
+
+            function renderTicketCreatorsFootnote(last7Keys, map) {
+                const container = document.getElementById('ticketCreatorsChart');
+                if (!container) return;
+
+                const existing = container.querySelector('.chart-footnote');
+                if (existing) existing.remove();
+
+                const foot = document.createElement('div');
+                foot.className = 'chart-footnote muted';
+                foot.style.fontSize = '13px';
+                foot.style.marginTop = '4px';
+
+                if (last7Keys.length === 0) {
+                    foot.textContent = 'No ticket creators found in the last 7 days.';
+                } else {
+                    const parts = last7Keys.slice().reverse().map(key => {
+                        const count = map[key] ? map[key].size : 0;
+                        return key + ': ' + count;
+                    });
+                    foot.textContent = 'Last 7 days (unique creators per day): ' + parts.join(' · ');
+                }
+
+                container.appendChild(foot);
+            }
+
+            function populateFilters() {
+                const contests = dataFetcher.getUniqueContests();
+                const dates = dataFetcher.getUniqueDrawDates();
+
+                const contestSelect = document.getElementById('filterContest');
+                contestSelect.length = 1;
+                contests.forEach(contest => {
+                    const option = document.createElement('option');
+                    option.value = contest;
+                    option.textContent = contest;
+                    contestSelect.appendChild(option);
+                });
+
+                const dateSelect = document.getElementById('filterDrawDate');
+                dateSelect.length = 1;
+                dates.forEach(date => {
+                    const option = document.createElement('option');
+                    option.value = date;
+                    option.textContent = date;
+                    dateSelect.appendChild(option);
+                });
+            }
+
+            function validateAndDisplayWinners() {
+                const allEntries = dataFetcher.getAllEntries();
+                const results = validator.getAllResults();
+
+                if (results.length === 0) {
+                    document.getElementById('noResultsMessage').style.display = 'block';
+                    document.getElementById('winnersTableContainer').style.display = 'none';
+                    document.getElementById('noWinnersMessage').style.display = 'none';
+                    updateWinnersSummary([]);
+                    return;
+                }
+
+                document.getElementById('noResultsMessage').style.display = 'none';
+
+                allWinners = validator.getWinners(allEntries);
+                applyFilters();
+            }
+
+            function applyFilters() {
+                const contest = document.getElementById('filterContest').value;
+                const drawDate = document.getElementById('filterDrawDate').value;
+                const prizeTier = document.getElementById('filterPrizeTier').value;
+                const whatsapp = document.getElementById('filterWhatsApp').value.toLowerCase();
+
+                filteredWinners = allWinners.filter(winner => {
+                    if (contest && winner.contest !== contest) return false;
+                    if (drawDate && winner.drawDate !== drawDate) return false;
+                    if (prizeTier && winner.validation.matches !== parseInt(prizeTier, 10)) return false;
+                    if (whatsapp && !winner.whatsapp.toLowerCase().includes(whatsapp)) return false;
+                    return true;
+                });
+
+                displayWinners();
+                updateWinnersSummary(filteredWinners);
+            }
+
+            function displayWinners() {
+                const tbody = document.getElementById('winnersTableBody');
+                tbody.innerHTML = '';
+
+                if (filteredWinners.length === 0) {
+                    document.getElementById('noWinnersMessage').style.display = 'block';
+                    document.getElementById('winnersTableContainer').style.display = 'none';
+                    return;
+                }
+
+                document.getElementById('noWinnersMessage').style.display = 'none';
+                document.getElementById('winnersTableContainer').style.display = 'block';
+
+                filteredWinners.forEach(winner => {
+                    const val = winner.validation;
+                    const row = tbody.insertRow();
+
+                    let prizeEmoji = '';
+                    let prizeBadgeClass = '';
+
+                    switch (val.matches) {
+                        case 5:
+                            prizeEmoji = '🏆';
+                            prizeBadgeClass = 'badge-gold';
+                            break;
+                        case 4:
+                            prizeEmoji = '🥈';
+                            prizeBadgeClass = 'badge-silver';
+                            break;
+                        case 3:
+                            prizeEmoji = '🥉';
+                            prizeBadgeClass = 'badge-bronze';
+                            break;
+                        case 2:
+                            prizeEmoji = '🎯';
+                            prizeBadgeClass = 'badge-green';
+                            break;
+                        case 1:
+                            prizeEmoji = '✨';
+                            prizeBadgeClass = 'badge-pending';
+                            break;
+                        default:
+                            prizeEmoji = '';
+                    }
+
+                    const chosenHTML = winner.chosenNumbers.map(num => {
+                        const isMatch = val.matchedNumbers.includes(num);
+                        return isMatch ?
+                            '<span style="background: #4CAF50; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold;">' + num + '</span>' :
+                            '<span>' + num + '</span>';
+                    }).join(', ');
+
+                    const matchedHTML = val.matchedNumbers
+                        .map(num => '<span style="background: #FFD700; color: #333; padding: 2px 6px; border-radius: 4px; font-weight: bold;">' + num + '</span>')
+                        .join(', ');
+
+                    row.innerHTML = `
+                        <td><span class="badge ${prizeBadgeClass}">${prizeEmoji} ${val.prizeTier.tier}</span></td>
+                        <td><strong style="font-size: 20px; color: #1e3c72;">${val.matches}</strong></td>
+                        <td>${winner.registrationDateTime}</td>
+                        <td>${winner.gameId}</td>
+                        <td><strong>${winner.whatsapp}</strong></td>
+                        <td style="font-size: 14px;">${chosenHTML}</td>
+                        <td style="font-size: 14px;"><strong>${val.winningNumbers.join(', ')}</strong></td>
+                        <td style="font-size: 14px;">${matchedHTML}</td>
+                        <td>${winner.drawDate}</td>
+                        <td><span class="badge badge-primary">${winner.contest}</span></td>
+                        <td>${winner.ticketNumber}<br><small>R$ ${winner.prize ? winner.prize.toFixed(2) : '0.00'}</small></td>
+                    `;
+                });
+            }
+
+            function updateWinnersSummary(list) {
+                const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+                list.forEach(w => { counts[w.validation.matches] = (counts[w.validation.matches] || 0) + 1; });
+                document.getElementById('sum5').textContent = counts[5] || 0;
+                document.getElementById('sum4').textContent = counts[4] || 0;
+                document.getElementById('sum3').textContent = counts[3] || 0;
+                document.getElementById('sum2').textContent = counts[2] || 0;
+                document.getElementById('sum1').textContent = counts[1] || 0;
+                document.getElementById('sumTotal').textContent = list.length;
+            }
+
+            function exportWinners() {
+                if (filteredWinners.length === 0) {
+                    alert('No winners to export');
+                    return;
+                }
+
+                let csv = 'Prize Tier,Matches,Registration Date/Time,Game ID,WhatsApp,Chosen Numbers,Winning Numbers,Matched Numbers,Draw Date,Contest,Ticket #\n';
+
+                filteredWinners.forEach(winner => {
+                    const val = winner.validation;
+                    csv += '"' + val.prizeTier.tier + '",';
+                    csv += '"' + val.matches + '",';
+                    csv += '"' + winner.registrationDateTime + '",';
+                    csv += '"' + winner.gameId + '",';
+                    csv += '"' + winner.whatsapp + '",';
+                    csv += '"' + winner.chosenNumbers.join(', ') + '",';
+                    csv += '"' + val.winningNumbers.join(', ') + '",';
+                    csv += '"' + val.matchedNumbers.join(', ') + '",';
+                    csv += '"' + winner.drawDate + '",';
+                    csv += '"' + winner.contest + '",';
+                    csv += '"' + winner.ticketNumber + '"\n';
+                });
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'lottery_winners_' + new Date().toISOString() + '.csv';
+                a.click();
+            }
+
+            function setupEventListeners() {
+                document.getElementById('validateBtn').addEventListener('click', validateAndDisplayWinners);
+                document.getElementById('exportWinnersBtn').addEventListener('click', exportWinners);
+                document.getElementById('clearFiltersBtn').addEventListener('click', () => {
+                    document.getElementById('filterContest').value = '';
+                    document.getElementById('filterDrawDate').value = '';
+                    document.getElementById('filterPrizeTier').value = '';
+                    document.getElementById('filterWhatsApp').value = '';
+                    applyFilters();
+                });
+
+                document.getElementById('filterContest').addEventListener('change', applyFilters);
+                document.getElementById('filterDrawDate').addEventListener('change', applyFilters);
+                document.getElementById('filterPrizeTier').addEventListener('change', applyFilters);
+                document.getElementById('filterWhatsApp').addEventListener('input', applyFilters);
+
+                document.getElementById('refreshBtn').addEventListener('click', init);
+                document.getElementById('refreshBtnSummary').addEventListener('click', init);
+            }
+
+            function showLoading(show) {
+                const loading = document.getElementById('loadingIndicator');
+                if (loading) {
+                    loading.style.display = show ? 'block' : 'none';
+                }
+            }
+
+            function showError(message) {
+                const errorMsg = document.getElementById('errorMessage');
+                if (errorMsg) {
+                    errorMsg.textContent = message;
+                    errorMsg.style.display = 'block';
+                }
+            }
+
+            function clearError() {
+                const errorMsg = document.getElementById('errorMessage');
+                if (errorMsg) {
+                    errorMsg.textContent = '';
+                    errorMsg.style.display = 'none';
+                }
+            }
+
+            function updateLastUpdateTime() {
+                const lastUpdate = document.getElementById('lastUpdate');
+                if (resultsFetcher.lastFetchTime) {
+                    lastUpdate.textContent = resultsFetcher.lastFetchTime.toLocaleString('pt-BR');
+                }
+            }
+
+            function setAccountBanner() {
+                const banner = document.getElementById('accountBanner');
+                if (!banner || typeof getSession !== 'function') return;
+                const session = getSession();
+                banner.textContent = session && session.account ? 'Logged in as: ' + session.account : 'Logged in as: (session missing)';
+            }
+
+            document.addEventListener('DOMContentLoaded', init);
+        </script>
+    </body>
+    </html>
