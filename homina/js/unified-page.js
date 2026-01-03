@@ -1070,32 +1070,44 @@ window.UnifiedPage = (function() {
                     statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
             }
             
-            // CUTOFF BADGE: Check if ticket was created AFTER 8 PM on recharge day
+            // CUTOFF BADGE: Check if ticket participates in Day 2 draw
+            // Rules:
+            // 1. Ticket created AFTER 8 PM on Day 1 (recharge day) → CUTOFF (participates Day 2)
+            // 2. Ticket created on Day 2 (any time) → CUTOFF (participates Day 2)
             // IMPORTANT:
             // - rechargeTime: From "Record Time" in RECHARGE POPN1 - Sheet1 (7).csv (Column 5)
             // - ticketTime: From "DATA/HORA REGISTRO" in OLD POP SORTE - SORTE (8).csv (Column 0)
+            // - CUTOFF badge means "participates in Day 2 draw" but ticket is still VALID!
             let cutoffBadge = '';
             if (bruteForceMatch && entry.parsedDate) {
                 const rechargeTime = bruteForceMatch.recordTime; // Record Time from recharge CSV
                 const ticketTime = entry.parsedDate; // DATA/HORA REGISTRO from entries CSV
                 
-                // Check if ticket was created on SAME DAY as recharge
-                const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-                const ticketDateStr = AdminCore.formatBrazilDateTime(ticketTime, {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-                
-                if (rechargeDateStr === ticketDateStr) {
-                    // Same day - check if ticket was created after 8 PM
-                    const ticketHour = parseInt(AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'}));
+                // Get eligibility window to determine Day 1 and Day 2
+                const window = calculateEligibilityWindow(rechargeTime);
+                if (window) {
+                    // Get ticket date (midnight) for comparison
+                    const ticketDate = new Date(ticketTime);
+                    ticketDate.setHours(0, 0, 0, 0);
                     
-                    if (ticketHour >= 20) {
+                    // Get Day 1 and Day 2 dates (midnight)
+                    const day1Date = new Date(window.day1);
+                    day1Date.setHours(0, 0, 0, 0);
+                    const day2Date = new Date(window.day2);
+                    day2Date.setHours(0, 0, 0, 0);
+                    
+                    // Check if ticket is on Day 1 or Day 2
+                    const isOnDay1 = ticketDate.getTime() === day1Date.getTime();
+                    const isOnDay2 = ticketDate.getTime() === day2Date.getTime();
+                    
+                    if (isOnDay1) {
+                        // Day 1: Check if ticket was created AFTER 8 PM
+                        const ticketHour = ticketTime.getHours();
+                        if (ticketHour >= 20) {
+                            cutoffBadge = ' <span class="badge badge-secondary" style="font-size: 0.65rem;">⏰ CUTOFF</span>';
+                        }
+                    } else if (isOnDay2) {
+                        // Day 2: ANY ticket created on Day 2 gets CUTOFF badge
                         cutoffBadge = ' <span class="badge badge-secondary" style="font-size: 0.65rem;">⏰ CUTOFF</span>';
                     }
                 }
