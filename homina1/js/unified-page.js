@@ -488,18 +488,7 @@ window.UnifiedPage = (function() {
             const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
             const status = csvStatus;
             
-            // Check for CUTOFF (registered after 20:00 BRT)
-            const isCutoff = isEntryCutoff(entry);
-            
-            // Debug ONLY first entry to avoid performance issues
-            if (index === 0) {
-                console.log('🎯 FIRST ENTRY:', entry.gameId, entry.ticketNumber);
-                console.log('   CSV Status:', entry.status);
-                console.log('   Parsed Status:', status);
-                console.log('   Is Cutoff:', isCutoff);
-            }
-            
-            // Status badge based on CSV column + CUTOFF indicator
+            // Status badge based on CSV column ONLY
             let statusBadge = '';
             switch (status) {
                 case 'VALID':
@@ -512,11 +501,6 @@ window.UnifiedPage = (function() {
                     break;
                 default:
                     statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
-            }
-            
-            // Add CUTOFF badge if applicable
-            if (isCutoff) {
-                statusBadge += ' <span class="badge badge-warning" style="margin-left:4px; font-size:0.75rem">⚠️ CUTOFF</span>';
             }
             
             // Format date/time with FULL YEAR
@@ -532,16 +516,16 @@ window.UnifiedPage = (function() {
             
             const platform = (entry.platform || 'POPN1').toUpperCase();
             
-            // RECHARGE INFO - USE VALIDATION RESULTS
+            // RECHARGE INFO - BRUTE FORCE: USE CSV STATUS + VALIDATION DATA
             let rechargeInfo = '-';
             
             // Get validation result for this entry
             const validation = validationMap.get(entry.ticketNumber);
-            const validationStatus = validation?.status || 'UNKNOWN';
             const isDay2 = validation?.isDay2 || false;
             
-            // ONLY show recharge info for VALID status
-            if (validationStatus === 'VALID' && validation?.matchedRecharge) {
+            // BRUTE FORCE: Show recharge info if CSV status is VALID/VÁLIDO AND validation has recharge data
+            const csvStatusUpper = (entry.status || '').toUpperCase();
+            if ((csvStatusUpper === 'VALID' || csvStatusUpper === 'VÁLIDO') && validation?.matchedRecharge) {
                 const r = validation.matchedRecharge;
                 const day2Badge = isDay2 ? '<br><span class="badge badge-warning" style="font-size: 0.6rem; padding: 2px 4px;">⚠️ DAY 2</span>' : '';
                 const orderNumShort = r.rechargeId ? r.rechargeId.substring(0, 12) + '...' : '-';
@@ -618,17 +602,14 @@ window.UnifiedPage = (function() {
         // ✅ VALIDATION STATUS - READ DIRECTLY FROM CSV (Column H - STATUS)
         const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
         const status = csvStatus;
-        const isCutoff = isEntryCutoff(entry);
         const statusClass = { 'VALID': 'success', 'INVALID': 'danger', 'VÁLIDO': 'success', 'INVÁLIDO': 'danger' }[csvStatus] || 'warning';
         const statusIcon = (status === 'VALID' || status === 'VÁLIDO') ? '✅' : (status === 'INVALID' || status === 'INVÁLIDO') ? '❌' : '⏳';
         const statusText = (status === 'VALID' || status === 'VÁLIDO') ? 'VALID' : (status === 'INVALID' || status === 'INVÁLIDO') ? 'INVALID' : 'PENDING';
         
-        const cutoffWarning = isCutoff ? '<br><span class="text-warning">⚠️ Registered after cutoff time (20:00 BRT)</span>' : '';
-        
         const statusHtml = `<div class="status-banner ${statusClass} mb-4">
             <span class="status-banner-icon">${statusIcon}</span>
             <span class="status-banner-text">
-                <strong>${statusText}</strong> - Status from CSV${cutoffWarning}
+                <strong>${statusText}</strong> - Status from CSV
             </span>
         </div>`;
         
