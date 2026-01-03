@@ -520,7 +520,8 @@ window.UnifiedPage = (function() {
             const validationResult = validationMap.get(entry.ticketNumber);
             
             // Only show recharge info for VALID tickets with matched recharge
-            if (status === 'VALID' && validationResult && validationResult.matchedRecharge) {
+            // Check validation status, NOT CSV status
+            if (validationResult && validationResult.status === 'VALID' && validationResult.matchedRecharge) {
                 const r = validationResult.matchedRecharge;
                 const chargeAmount = r.amount || 0;
                 let amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
@@ -558,6 +559,8 @@ window.UnifiedPage = (function() {
                 // Debug first entry with recharge
                 if (index === 0) {
                     console.log('💰 VALID RECHARGE for first entry:');
+                    console.log('   CSV Status:', status);
+                    console.log('   Validation Status:', validationResult.status);
                     console.log('   Game ID:', entry.gameId);
                     console.log('   Order:', shortOrderNumber);
                     console.log('   Time:', timeDisplay);
@@ -566,6 +569,15 @@ window.UnifiedPage = (function() {
                 }
             } else if (index === 0) {
                 console.log('❌ NO VALID RECHARGE for first entry');
+                if (validationResult) {
+                    console.log('   Validation exists but:', {
+                        csvStatus: status,
+                        validationStatus: validationResult.status,
+                        hasMatchedRecharge: !!validationResult.matchedRecharge
+                    });
+                } else {
+                    console.log('   No validation result found for ticket:', entry.ticketNumber);
+                }
             }
             
             // WhatsApp masked display
