@@ -346,7 +346,9 @@ window.RechargeValidator = (function() {
         
         // Check for cutoff (ticket created after 20:00)
         if (ticket.parsedDate && ticket.parsedDate instanceof Date && !isNaN(ticket.parsedDate.getTime())) {
-            const regHour = ticket.parsedDate.getHours();
+            // Use UTC-based hour calculation to avoid browser timezone issues
+            const regHour = (ticket.parsedDate.getUTCHours() - 3 + 24) % 24;
+            
             const dateStr = AdminCore.getBrazilDateString(ticket.parsedDate);
             if (dateStr) {
                 const checkDate = new Date(`${dateStr}T12:00:00-03:00`);

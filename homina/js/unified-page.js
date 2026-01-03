@@ -53,15 +53,43 @@ window.UnifiedPage = (function() {
             return false;
         }
         
-        const regHour = entry.parsedDate.getHours();
-        const month = entry.parsedDate.getMonth();
-        const day = entry.parsedDate.getDate();
+        // Use UTC methods to avoid browser timezone issues
+        // parseBrazilDateTime creates UTC date: HH(BRT) + 3 = HH(UTC)
+        // So HH(BRT) = HH(UTC) - 3
+        const regHour = (entry.parsedDate.getUTCHours() - 3 + 24) % 24;
+        const month = entry.parsedDate.getMonth(); // getMonth is local, but usually OK if date is correct. Better use getUTCMonth if possible?
+        // Actually, parseBrazilDateTime creates a specific point in time.
+        // Let's stick to UTC methods for everything to be safe.
+        
+        // Note: parseBrazilDateTime uses Date.UTC(y, m-1, d, hh+3...)
+        // So the UTC date actually represents the correct absolute time.
+        // But to extract "Brazil Day", we need to subtract 3 hours from UTC time.
+        
+        // Helper to get Brazil parts
+        const brTime = new Date(entry.parsedDate.getTime() - 3 * 60 * 60 * 1000);
+        // Now brTime's UTC components match Brazil wall clock (roughly, ignoring actual offset shifts if we just treat it as numbers)
+        // Actually, safer:
+        // entry.parsedDate is the correct absolute timestamp.
+        // We want to know the hour in Brazil (UTC-3).
+        
+        const utcHour = entry.parsedDate.getUTCHours();
+        const brazHour = (utcHour - 3 + 24) % 24;
+        
+        // For day/month checking, we need to be careful about day boundaries.
+        // If it's 01:00 UTC (which is 22:00 BRT previous day), getUTCDate will be day X, but Brazil is day X-1.
+        // Let's rely on AdminCore.getBrazilDateString to be safe for date parts, or just use the logic that we know works for hours.
+        
+        const dateStr = AdminCore.getBrazilDateString(entry.parsedDate);
+        if (!dateStr) return false;
+        
+        const [y, m, d] = dateStr.split('-').map(Number);
         
         // Check for early cutoff days (Dec 24, Dec 31)
-        const isEarlyCutoffDay = month === 11 && (day === 24 || day === 31);
+        // m is 1-indexed from dateStr
+        const isEarlyCutoffDay = m === 12 && (d === 24 || d === 31);
         const cutoffHour = isEarlyCutoffDay ? 16 : 20;
         
-        return regHour >= cutoffHour;
+        return brazHour >= cutoffHour;
     }
     
     // Results state
