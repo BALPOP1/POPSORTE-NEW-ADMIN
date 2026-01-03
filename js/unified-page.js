@@ -458,6 +458,7 @@ window.UnifiedPage = (function() {
     // BRUTE FORCE RECHARGE MATCHING SYSTEM
     let boundOrderNumbers = new Set(); // Track used order numbers
     let entryRechargeMap = new Map(); // Map ticket number to recharge info
+    let lastMatchedDataSize = 0; // Track if data changed
     
     /**
      * BRUTE FORCE: Match entries to recharges by closest time
@@ -465,6 +466,14 @@ window.UnifiedPage = (function() {
      */
     function bruteForceMatchRecharges() {
         console.log('💪 BRUTE FORCE MATCHING START');
+        
+        // Check if we need to rematch (data size changed)
+        const currentDataSize = (currentData.entries?.length || 0) + (currentData.allRecharges?.length || 0);
+        if (lastMatchedDataSize === currentDataSize && entryRechargeMap.size > 0) {
+            console.log('✅ Using cached matches (data unchanged)');
+            return;
+        }
+        lastMatchedDataSize = currentDataSize;
         
         boundOrderNumbers.clear();
         entryRechargeMap.clear();
@@ -504,17 +513,34 @@ window.UnifiedPage = (function() {
                 continue;
             }
             
-            // Find all recharges for this game ID
-            const userRecharges = currentData.allRecharges.filter(r => 
-                r.gameId === entry.gameId && 
+            // Find all recharges for THIS EXACT GAME ID ONLY
+            const allGameIdRecharges = currentData.allRecharges.filter(r => r.gameId === entry.gameId);
+            
+            const userRecharges = allGameIdRecharges.filter(r => 
                 r.rechargeTime instanceof Date &&
                 !isNaN(r.rechargeTime.getTime()) &&
                 r.rechargeId && 
                 !boundOrderNumbers.has(r.rechargeId) // NOT already bound
             );
             
+            // DEBUG: Show filtering effect
+            if (matchCount < 3) {
+                console.log(`🔎 GameID=${entry.gameId}: Total recharges=${allGameIdRecharges.length}, Available (not bound)=${userRecharges.length}, Already bound=${allGameIdRecharges.length - userRecharges.length}`);
+            }
+            
             if (userRecharges.length === 0) {
+                if (matchCount < 3) {
+                    console.log(`⚠️ No available recharges for GameID=${entry.gameId}, Ticket=${entry.ticketNumber} (all ${allGameIdRecharges.length} recharges already bound)`);
+                }
                 continue;
+            }
+            
+            // DEBUG: Show available recharges for first few entries
+            if (matchCount < 3) {
+                console.log(`🔎 Entry GameID=${entry.gameId}, Available recharges: ${userRecharges.length}, Bound so far: ${boundOrderNumbers.size}`);
+                if (userRecharges.length > 0) {
+                    console.log(`   First available recharge: ${userRecharges[0].rechargeId.substring(0, 20)}... (R$${userRecharges[0].amount})`);
+                }
             }
             
             // Find CLOSEST recharge by time (must be BEFORE ticket)
@@ -540,17 +566,33 @@ window.UnifiedPage = (function() {
             
             // BIND IT!
             if (closestRecharge) {
-                boundOrderNumbers.add(closestRecharge.rechargeId);
-                entryRechargeMap.set(entry.ticketNumber, {
-                    orderNumber: closestRecharge.rechargeId,
+                const orderToAdd = closestRecharge.rechargeId;
+                
+                // DEBUG: Verify it's not already bound
+                if (boundOrderNumbers.has(orderToAdd)) {
+                    console.error(`🚨 BUG! Trying to bind already-bound order: ${orderToAdd.substring(0, 20)}...`);
+                }
+                
+                boundOrderNumbers.add(orderToAdd);
+                
+                // DEBUG: Verify it was added
+                if (!boundOrderNumbers.has(orderToAdd)) {
+                    console.error(`🚨 BUG! Failed to add order to boundOrderNumbers: ${orderToAdd.substring(0, 20)}...`);
+                }
+                
+                // USE UNIQUE KEY: gameId + timestamp (ticket number is irrelevant!)
+                const uniqueKey = `${entry.gameId}-${entry.parsedDate.getTime()}`;
+                entryRechargeMap.set(uniqueKey, {
+                    orderNumber: orderToAdd,
                     recordTime: closestRecharge.rechargeTime,
-                    amount: closestRecharge.amount
+                    amount: closestRecharge.amount,
+                    gameId: closestRecharge.gameId // Store for verification
                 });
                 matchCount++;
                 
-                // DEBUG first 5 matches
-                if (matchCount <= 5) {
-                    console.log(`Match ${matchCount}: Ticket=${entry.ticketNumber} → Order=${closestRecharge.rechargeId.substring(0, 15)}... (R$${closestRecharge.amount})`);
+                // DEBUG first 10 matches - SHOW GAME ID MATCH
+                if (matchCount <= 10) {
+                    console.log(`✅ Match ${matchCount}: Key=${uniqueKey.substring(0, 30)}... | GameID=${entry.gameId} → Order=${orderToAdd.substring(0, 15)}... (R$${closestRecharge.amount}) | BoundSize=${boundOrderNumbers.size}`);
                 }
             }
         }
@@ -558,6 +600,19 @@ window.UnifiedPage = (function() {
         console.log(`✅ BRUTE FORCE MATCHED: ${matchCount} tickets bound to recharges`);
         console.log(`📊 Bound order numbers: ${boundOrderNumbers.size}`);
         console.log(`📋 Entry-Recharge map size: ${entryRechargeMap.size}`);
+        
+        // DETAILED DEBUG: Show first 10 unique order numbers
+        const orderArray = Array.from(boundOrderNumbers).slice(0, 10);
+        console.log(`🔍 First 10 bound orders:`, orderArray.map(o => o.substring(0, 20) + '...'));
+        
+        // DETAILED DEBUG: Show first 10 entry mappings
+        const mappingArray = Array.from(entryRechargeMap.entries()).slice(0, 10);
+        console.log(`🔍 First 10 entry mappings:`, mappingArray.map(([key, data]) => ({
+            key: key.substring(0, 30) + '...',
+            order: data.orderNumber.substring(0, 20) + '...',
+            gameId: data.gameId,
+            amount: data.amount
+        })));
     }
 
     function renderEntriesTable() {
@@ -567,8 +622,8 @@ window.UnifiedPage = (function() {
             return;
         }
         
-        // BRUTE FORCE: Match recharges to entries
-        bruteForceMatchRecharges();
+        // DON'T call bruteForceMatchRecharges here - it clears the bindings!
+        // It should only be called once when data is loaded
         
         const start = (entriesPage - 1) * entriesPerPage;
         const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
@@ -621,12 +676,18 @@ window.UnifiedPage = (function() {
             const entryCsvStatus = (entry.status || '').toUpperCase();
             const isValidEntry = (entryCsvStatus === 'VALID' || entryCsvStatus === 'VÁLIDO');
             
-            // Get brute force matched recharge
-            const bruteForceMatch = entryRechargeMap.get(entry.ticketNumber);
+            // Get brute force matched recharge using UNIQUE KEY: gameId + timestamp
+            const lookupKey = `${entry.gameId}-${entry.parsedDate ? entry.parsedDate.getTime() : 0}`;
+            const bruteForceMatch = entryRechargeMap.get(lookupKey);
             
             // DEBUG first few entries
             if (index < 5) {
-                console.log(`Entry ${index}: Ticket=${entry.ticketNumber}, Status=${entryCsvStatus}, HasMatch=${!!bruteForceMatch}, IsValid=${isValidEntry}`);
+                console.log(`Entry ${index}: GameID=${entry.gameId}, LookupKey=${lookupKey}, Status=${entryCsvStatus}, HasMatch=${!!bruteForceMatch}, MatchGameID=${bruteForceMatch?.gameId}, IsValid=${isValidEntry}`);
+            }
+            
+            // SAFETY CHECK: Verify Game IDs match (should always be true)
+            if (bruteForceMatch && bruteForceMatch.gameId !== entry.gameId) {
+                console.error(`❌ GAME ID MISMATCH! Entry=${entry.gameId}, Recharge=${bruteForceMatch.gameId}`);
             }
             
             if (isValidEntry && bruteForceMatch) {
@@ -1173,6 +1234,9 @@ window.UnifiedPage = (function() {
                     rechargeAmount: v.matchedRecharge?.amount
                 })));
             }
+            
+            // BRUTE FORCE: Match recharges ONCE when data is loaded
+            bruteForceMatchRecharges();
             
             // Render all sections
             renderDashboard();
