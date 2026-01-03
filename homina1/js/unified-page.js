@@ -580,7 +580,9 @@ window.UnifiedPage = (function() {
                     console.error(`🚨 BUG! Failed to add order to boundOrderNumbers: ${orderToAdd.substring(0, 20)}...`);
                 }
                 
-                entryRechargeMap.set(entry.ticketNumber, {
+                // USE UNIQUE KEY: gameId + timestamp (ticket number is irrelevant!)
+                const uniqueKey = `${entry.gameId}-${entry.parsedDate.getTime()}`;
+                entryRechargeMap.set(uniqueKey, {
                     orderNumber: orderToAdd,
                     recordTime: closestRecharge.rechargeTime,
                     amount: closestRecharge.amount,
@@ -590,7 +592,7 @@ window.UnifiedPage = (function() {
                 
                 // DEBUG first 10 matches - SHOW GAME ID MATCH
                 if (matchCount <= 10) {
-                    console.log(`✅ Match ${matchCount}: GameID=${entry.gameId} | Ticket=${entry.ticketNumber} → Order=${orderToAdd.substring(0, 15)}... (R$${closestRecharge.amount}) | BoundSize=${boundOrderNumbers.size}`);
+                    console.log(`✅ Match ${matchCount}: Key=${uniqueKey.substring(0, 30)}... | GameID=${entry.gameId} → Order=${orderToAdd.substring(0, 15)}... (R$${closestRecharge.amount}) | BoundSize=${boundOrderNumbers.size}`);
                 }
             }
         }
@@ -605,10 +607,11 @@ window.UnifiedPage = (function() {
         
         // DETAILED DEBUG: Show first 10 entry mappings
         const mappingArray = Array.from(entryRechargeMap.entries()).slice(0, 10);
-        console.log(`🔍 First 10 entry mappings:`, mappingArray.map(([ticket, data]) => ({
-            ticket: ticket,
+        console.log(`🔍 First 10 entry mappings:`, mappingArray.map(([key, data]) => ({
+            key: key.substring(0, 30) + '...',
             order: data.orderNumber.substring(0, 20) + '...',
-            gameId: data.gameId
+            gameId: data.gameId,
+            amount: data.amount
         })));
     }
 
@@ -673,12 +676,13 @@ window.UnifiedPage = (function() {
             const entryCsvStatus = (entry.status || '').toUpperCase();
             const isValidEntry = (entryCsvStatus === 'VALID' || entryCsvStatus === 'VÁLIDO');
             
-            // Get brute force matched recharge
-            const bruteForceMatch = entryRechargeMap.get(entry.ticketNumber);
+            // Get brute force matched recharge using UNIQUE KEY: gameId + timestamp
+            const lookupKey = `${entry.gameId}-${entry.parsedDate ? entry.parsedDate.getTime() : 0}`;
+            const bruteForceMatch = entryRechargeMap.get(lookupKey);
             
             // DEBUG first few entries
             if (index < 5) {
-                console.log(`Entry ${index}: GameID=${entry.gameId}, Ticket=${entry.ticketNumber}, Status=${entryCsvStatus}, HasMatch=${!!bruteForceMatch}, MatchGameID=${bruteForceMatch?.gameId}, IsValid=${isValidEntry}`);
+                console.log(`Entry ${index}: GameID=${entry.gameId}, LookupKey=${lookupKey}, Status=${entryCsvStatus}, HasMatch=${!!bruteForceMatch}, MatchGameID=${bruteForceMatch?.gameId}, IsValid=${isValidEntry}`);
             }
             
             // SAFETY CHECK: Verify Game IDs match (should always be true)
