@@ -519,32 +519,37 @@ window.UnifiedPage = (function() {
             return null;
         }
         
-        // Get recharge date components in Brazilian time
-        const rechargeDate = new Date(rechargeTime);
-        const rechargeHour = rechargeDate.getHours();
+        // Get recharge hour in Brazilian timezone (CRITICAL for correct cutoff calculation)
+        const rechargeHourStr = AdminCore.formatBrazilDateTime(rechargeTime, {hour: '2-digit'});
+        const rechargeHour = parseInt(rechargeHourStr, 10);
         
-        // Get start of recharge day (midnight)
-        const startOfRechargeDay = new Date(rechargeDate);
-        startOfRechargeDay.setHours(0, 0, 0, 0);
+        // Get recharge date string in Brazilian timezone for Day 1/Day 2 calculation
+        const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
         
+        // Parse recharge date components (DD/MM/YYYY)
+        const [rechargeDay, rechargeMonth, rechargeYear] = rechargeDateStr.split('/').map(Number);
+        
+        // Create Day 1 and Day 2 dates using the same method as AdminCore.parseBrazilDateTime
+        // (which creates dates representing Brazilian time but stored as UTC)
         let day1, day2;
         
         if (rechargeHour < 20) {
             // Recharge BEFORE 8 PM: Day 1 = same day, Day 2 = next day
-            day1 = new Date(startOfRechargeDay);
-            day2 = new Date(startOfRechargeDay);
-            day2.setDate(day2.getDate() + 1);
+            day1 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay, 3, 0, 0, 0)); // Midnight BRT
+            day2 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + 1, 3, 0, 0, 0)); // Next day midnight BRT
         } else {
             // Recharge AFTER 8 PM: Day 1 = next day, Day 2 = day after next
-            day1 = new Date(startOfRechargeDay);
-            day1.setDate(day1.getDate() + 1);
-            day2 = new Date(startOfRechargeDay);
-            day2.setDate(day2.getDate() + 2);
+            day1 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + 1, 3, 0, 0, 0)); // Next day midnight BRT
+            day2 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + 2, 3, 0, 0, 0)); // Day after next midnight BRT
         }
         
-        // Eligibility ends at 8 PM (20:00) on Day 2
-        const eligibilityEnd = new Date(day2);
-        eligibilityEnd.setHours(20, 0, 0, 0);
+        // Eligibility ends at 8 PM (20:00) on Day 2 in Brazilian timezone
+        // 8 PM BRT = 20:00 BRT = 23:00 UTC (BRT is UTC-3)
+        const eligibilityEnd = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + (rechargeHour < 20 ? 2 : 3), 23, 0, 0, 0));
         
         return {
             startDate: rechargeTime, // Starts from recharge time
@@ -1135,6 +1140,34 @@ window.UnifiedPage = (function() {
                     // Check if ticket is on Day 1 or Day 2
                     const isOnDay1 = ticketDateStr === day1DateStr;
                     const isOnDay2 = ticketDateStr === day2DateStr;
+                    
+                    // DEBUG: Log cutoff calculation for troubleshooting
+                    const DEBUG_CUTOFF = true; // Set to true to enable
+                    if (DEBUG_CUTOFF && (entry.gameId === '3105451998' || entry.gameId === '3437192929' || entry.gameId === '3384889775')) {
+                        const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        const ticketTimeStr = AdminCore.formatBrazilDateTime(ticketTime, {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        console.log(`🔍 CUTOFF DEBUG GameID=${entry.gameId}:`);
+                        console.log(`   Recharge: ${rechargeDateStr} (Day1=${day1DateStr}, Day2=${day2DateStr})`);
+                        console.log(`   Ticket: ${ticketTimeStr} (Date=${ticketDateStr})`);
+                        console.log(`   isOnDay1=${isOnDay1}, isOnDay2=${isOnDay2}`);
+                        if (isOnDay1) {
+                            const ticketHourStr = AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'});
+                            const ticketHour = parseInt(ticketHourStr, 10);
+                            console.log(`   Ticket hour: ${ticketHour} (>=20? ${ticketHour >= 20})`);
+                        }
+                    }
                     
                     if (isOnDay1) {
                         // Day 1: Check if ticket was created AFTER 8 PM (use Brazilian timezone)
