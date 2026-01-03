@@ -715,8 +715,8 @@ window.UnifiedPage = (function() {
             // Format draw date
             const formattedDrawDate = formatDrawDate(entry.drawDate);
             
-            // Create unique identifier for this entry (gameId + timestamp)
-            const uniqueId = `${entry.gameId}-${entry.parsedDate ? entry.parsedDate.getTime() : 0}`;
+            // Create unique key for Details button (ticket numbers are NOT unique!)
+            const uniqueKey = `${entry.gameId}-${entry.parsedDate ? entry.parsedDate.getTime() : 0}`;
             
             return `
                 <tr>
@@ -730,7 +730,7 @@ window.UnifiedPage = (function() {
                     <td><span class="badge badge-info">${entry.contest}</span></td>
                     <td style="font-size:0.9rem">${entry.ticketNumber}</td>
                     <td>${rechargeInfo}</td>
-                    <td><button class="btn btn-sm btn-outline" onclick="UnifiedPage.showTicketDetails('${uniqueId}')">Details</button></td>
+                    <td><button class="btn btn-sm btn-outline" onclick="UnifiedPage.showTicketDetails('${uniqueKey}')">Details</button></td>
                 </tr>
             `;
             }).join('');
@@ -769,13 +769,13 @@ window.UnifiedPage = (function() {
         renderEntriesPagination();
     }
 
-    function showTicketDetails(uniqueId) {
-        // Parse uniqueId: "gameId-timestamp"
-        const parts = uniqueId.split('-');
-        const gameId = parts[0];
-        const timestamp = parseInt(parts[1], 10);
+    function showTicketDetails(uniqueKey) {
+        // Parse uniqueKey: "gameId-timestamp"
+        const dashIndex = uniqueKey.lastIndexOf('-');
+        const gameId = uniqueKey.substring(0, dashIndex);
+        const timestamp = parseInt(uniqueKey.substring(dashIndex + 1), 10);
         
-        // Find entry by gameId AND timestamp
+        // Find entry by EXACT gameId AND timestamp match
         const entry = currentData.entries.find(e => 
             e.gameId === gameId && 
             e.parsedDate && 
@@ -783,7 +783,7 @@ window.UnifiedPage = (function() {
         );
         
         if (!entry) {
-            console.error('Entry not found for uniqueId:', uniqueId);
+            console.error('Entry not found for uniqueKey:', uniqueKey);
             return;
         }
         
@@ -810,52 +810,65 @@ window.UnifiedPage = (function() {
             return `<span class="number-badge ${colorClass}">${String(n).padStart(2,'0')}</span>`;
         }).join('');
         
-        // RECHARGE INFORMATION - USE BRUTE FORCE MATCHED RECHARGE
-        let rechargeHtml = '<p class="text-muted">No recharge bound to this ticket</p>';
+        // RECHARGE INFORMATION - DIRECT MATCH BY GAME ID
+        let rechargeHtml = '<p class="text-muted">No recharge found for this Game ID</p>';
         
-        // Get the BOUND recharge for this entry (if VALID)
-        const isValidStatus = (csvStatus === 'VALID' || csvStatus === 'VÁLIDO');
-        const lookupKey = `${entry.gameId}-${entry.parsedDate ? entry.parsedDate.getTime() : 0}`;
-        const boundRecharge = entryRechargeMap.get(lookupKey);
-        
-        if (isValidStatus && boundRecharge) {
-            // Show the BOUND recharge
-            const orderNumber = boundRecharge.orderNumber || '-';
-            const chargeAmount = boundRecharge.amount || 0;
-            const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
+        // Find recharge directly by matching gameId
+        const entryGameId = entry.gameId;
+        if (entryGameId && currentData.allRecharges && currentData.allRecharges.length > 0) {
+            const userRecharges = currentData.allRecharges.filter(r => r.gameId === entryGameId);
             
-            let timeDisplay = '-';
-            if (boundRecharge.recordTime instanceof Date && !isNaN(boundRecharge.recordTime.getTime())) {
-                timeDisplay = AdminCore.formatBrazilDateTime(boundRecharge.recordTime, { 
-                    day: '2-digit', 
-                    month: '2-digit', 
-                    year: 'numeric', 
-                    hour: '2-digit', 
-                    minute: '2-digit', 
-                    second: '2-digit' 
+            if (userRecharges.length > 0) {
+                // Show ALL recharges for this user
+                rechargeHtml = '<div class="mb-3">';
+                
+                userRecharges.slice(0, 5).forEach((r, idx) => {
+                    const orderNumber = r.rechargeId || '-';
+                    const chargeAmount = r.amount || 0;
+                    const amountDisplay = `R$ ${chargeAmount.toFixed(2)}`;
+                    
+                    let timeDisplay = '-';
+                    if (r.rechargeTime instanceof Date && !isNaN(r.rechargeTime.getTime())) {
+                        timeDisplay = AdminCore.formatBrazilDateTime(r.rechargeTime, { 
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: 'numeric', 
+                            hour: '2-digit', 
+                            minute: '2-digit', 
+                            second: '2-digit' 
+                        });
+                    } else if (r.rechargeTimeRaw) {
+                        timeDisplay = r.rechargeTimeRaw;
+                    }
+                    
+                    rechargeHtml += `
+                        <div class="ticket-info-grid mb-3" style="border-bottom: 1px solid var(--border-primary); padding-bottom: 12px;">
+                            <div class="ticket-info-item">
+                                <span class="label">💰 Amount ${idx === 0 ? '(Latest)' : ''}</span>
+                                <span class="value text-success"><strong>${amountDisplay}</strong></span>
+                            </div>
+                            <div class="ticket-info-item">
+                                <span class="label">📋 Order Number</span>
+                                <span class="value" style="font-size:0.7rem;word-break:break-all">${orderNumber}</span>
+                            </div>
+                            <div class="ticket-info-item">
+                                <span class="label">⏰ Recharge Time</span>
+                                <span class="value">${timeDisplay}</span>
+                            </div>
+                            <div class="ticket-info-item">
+                                <span class="label">🎮 Game ID</span>
+                                <span class="value">${r.gameId}</span>
+                            </div>
+                        </div>
+                    `;
                 });
+                
+                if (userRecharges.length > 5) {
+                    rechargeHtml += `<p class="text-muted text-center">... and ${userRecharges.length - 5} more recharges</p>`;
+                }
+                
+                rechargeHtml += '</div>';
             }
-            
-            rechargeHtml = `
-                <div class="ticket-info-grid mb-3">
-                    <div class="ticket-info-item">
-                        <span class="label">💰 Amount</span>
-                        <span class="value text-success"><strong>${amountDisplay}</strong></span>
-                    </div>
-                    <div class="ticket-info-item">
-                        <span class="label">📋 Order Number (Full)</span>
-                        <span class="value" style="font-size:0.7rem;word-break:break-all">${orderNumber}</span>
-                    </div>
-                    <div class="ticket-info-item">
-                        <span class="label">⏰ Recharge Time</span>
-                        <span class="value">${timeDisplay}</span>
-                    </div>
-                    <div class="ticket-info-item">
-                        <span class="label">🎮 Game ID</span>
-                        <span class="value">${boundRecharge.gameId}</span>
-                    </div>
-                </div>
-            `;
         }
         
         modalContent.innerHTML = `
