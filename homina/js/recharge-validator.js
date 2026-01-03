@@ -414,7 +414,7 @@ window.RechargeValidator = (function() {
                 result.reason = 'Marked invalid in source data';
             }
             
-            if (isFirstTicket) {
+            if (isDebugTicket) {
                 console.log('===== VALIDATION RESULT (FIRST TICKET) =====');
                 console.log('Status:', result.status);
                 console.log('Matched recharge:', {
@@ -464,7 +464,7 @@ window.RechargeValidator = (function() {
                 }
             }
             
-            if (isFirstTicket) {
+            if (isDebugTicket) {
                 console.log('===== VALIDATION RESULT (FIRST TICKET) =====');
                 console.log('Status:', result.status);
                 console.log('Reason:', result.reason);
