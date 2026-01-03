@@ -199,19 +199,22 @@ window.RechargeValidator = (function() {
         // Parse ticket draw date to normalized format (YYYY-MM-DD)
         let ticketDrawStr = '';
         if (ticketDrawDate) {
-            const parts = ticketDrawDate.split(/[\/\-]/);
+            // Remove time part if present
+            const datePart = ticketDrawDate.split(' ')[0];
+            const parts = datePart.split(/[\/\-]/);
             if (parts.length === 3) {
                 if (parts[0].length === 4) {
                     // YYYY-MM-DD
-                    ticketDrawStr = ticketDrawDate;
+                    ticketDrawStr = parts.join('-');
                 } else {
-                    // DD/MM/YYYY
+                    // DD/MM/YYYY -> YYYY-MM-DD
                     ticketDrawStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
                 }
             }
         }
         
         if (!ticketDrawStr) {
+            if (isFirstTicket) console.log('❌ Invalid ticket draw date format:', ticketDrawDate);
             return null; // Can't validate without draw date
         }
         
@@ -229,12 +232,7 @@ window.RechargeValidator = (function() {
         eligibleRecharges.sort((a, b) => a.rechargeTime.getTime() - b.rechargeTime.getTime());
         
         // Debug logging
-        const isFirstTicket = ticket.ticketNumber && ticket.ticketNumber.includes('1°');
-        if (isFirstTicket) {
-            console.log('===== MATCHING FIRST TICKET =====');
-            console.log('Ticket draw date:', ticketDrawStr);
-            console.log('Eligible recharges:', eligibleRecharges.length);
-        }
+        const isDebugTicket = ticket.ticketNumber && (ticket.ticketNumber.includes('1°') || ticket.ticketNumber === '1° bilhete');
         
         // Try to match with each recharge (earliest first)
         for (const recharge of eligibleRecharges) {
@@ -250,23 +248,18 @@ window.RechargeValidator = (function() {
                 matchType = 'day2';
             }
             
-            if (isFirstTicket) {
-                console.log(`Checking recharge R$${recharge.amount}:`, {
-                    rechargeTime: recharge.rechargeTime,
-                    eligible1: window.eligible1Str,
-                    eligible2: window.eligible2Str,
-                    ticketDraw: ticketDrawStr,
-                    matchType: matchType
-                });
+            if (isDebugTicket) {
+                console.log(`   Checking R$${recharge.amount} (${recharge.rechargeTime.toISOString()}):`);
+                console.log(`     Eligible1: ${window.eligible1Str} vs Ticket: ${ticketDrawStr} -> ${ticketDrawStr === window.eligible1Str}`);
+                console.log(`     Eligible2: ${window.eligible2Str} vs Ticket: ${ticketDrawStr} -> ${ticketDrawStr === window.eligible2Str}`);
             }
             
             // No match with eligibility window
             if (!matchType) {
-                if (isFirstTicket) console.log('  ❌ Draw date outside eligibility window');
                 continue;
             }
             
-            if (isFirstTicket) console.log(`  ✓ Match found on ${matchType.toUpperCase()}! Checking if recharge is consumed...`);
+            if (isDebugTicket) console.log(`     ✓ Match found on ${matchType.toUpperCase()}! Checking usage...`);
             
             // Check if this recharge is already consumed by a prior ticket
             const priorTickets = allTickets.filter(t => 
@@ -287,10 +280,11 @@ window.RechargeValidator = (function() {
                 // Parse prior ticket's draw date
                 let priorDrawStr = '';
                 if (prior.drawDate) {
-                    const priorParts = prior.drawDate.split(/[\/\-]/);
+                    const datePart = prior.drawDate.split(' ')[0];
+                    const priorParts = datePart.split(/[\/\-]/);
                     if (priorParts.length === 3) {
                         if (priorParts[0].length === 4) {
-                            priorDrawStr = prior.drawDate;
+                            priorDrawStr = priorParts.join('-');
                         } else {
                             priorDrawStr = `${priorParts[2]}-${priorParts[1].padStart(2, '0')}-${priorParts[0].padStart(2, '0')}`;
                         }
@@ -300,14 +294,13 @@ window.RechargeValidator = (function() {
                 // Check if prior ticket used this recharge within its eligibility window
                 if (priorDrawStr === priorWindow.eligible1Str || priorDrawStr === priorWindow.eligible2Str) {
                     rechargeConsumed = true;
-                    if (isFirstTicket) console.log(`  ❌ Recharge already consumed by ticket ${prior.ticketNumber}`);
+                    if (isDebugTicket) console.log(`     ❌ Recharge consumed by ${prior.ticketNumber}`);
                     break;
                 }
             }
             
             if (!rechargeConsumed) {
-                if (isFirstTicket) console.log(`  ✅ MATCH FOUND! Recharge available, using ${matchType.toUpperCase()}`);
-                if (isFirstTicket) console.log('====================================');
+                if (isDebugTicket) console.log(`     ✅ AVAILABLE! Using ${matchType.toUpperCase()}`);
                 return {
                     ...recharge,
                     isDay2: matchType === 'day2'
@@ -315,8 +308,7 @@ window.RechargeValidator = (function() {
             }
         }
         
-        if (isFirstTicket) console.log('❌ NO MATCH - All recharges consumed or outside window');
-        if (isFirstTicket) console.log('====================================');
+        if (isDebugTicket) console.log('   ❌ NO MATCH - All recharges consumed or outside window');
         return null;
     }
 
@@ -373,18 +365,20 @@ window.RechargeValidator = (function() {
         const isPreInvalid = ['INVALID', 'INVÁLIDO'].includes(existingStatus);
         
         // HARDCORE DEBUG: Log first ticket validation
-        const isFirstTicket = ticket.ticketNumber && ticket.ticketNumber.includes('1°');
-        if (isFirstTicket) {
-            console.log('===== VALIDATING FIRST TICKET =====');
-            console.log('Ticket:', {
-                ticketNumber: ticket.ticketNumber,
-                gameId: gameId,
-                parsedDate: ticket.parsedDate,
-                drawDate: ticket.drawDate,
-                status: ticket.status
-            });
-            console.log('Found recharges for this gameId:', recharges.length);
-            console.log('====================================');
+        const isDebugTicket = ticket.ticketNumber && (ticket.ticketNumber.includes('1°') || ticket.ticketNumber === '1° bilhete');
+        if (isDebugTicket) {
+            console.log('🔍 DEBUG VALIDATION:', ticket.ticketNumber);
+            console.log('   Game ID:', gameId);
+            console.log('   Ticket Date:', ticket.parsedDate);
+            console.log('   Draw Date (Raw):', ticket.drawDate);
+            console.log('   Recharges found:', recharges.length);
+            if (recharges.length > 0) {
+                console.log('   First Recharge:', {
+                    amount: recharges[0].amount,
+                    time: recharges[0].rechargeTime,
+                    id: recharges[0].rechargeId
+                });
+            }
         }
         
         // If no recharges, it's invalid regardless (unless pre-validated, but we can't show info)

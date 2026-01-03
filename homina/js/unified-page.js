@@ -1204,6 +1204,11 @@ window.UnifiedPage = (function() {
         isInitialized = true;
     }
 
+    function forceRefresh() {
+        console.log('UnifiedPage: Forcing complete refresh...');
+        loadAllData(true);
+    }
+
     // Event listeners
     if (typeof AdminCore !== 'undefined') {
         AdminCore.on('refresh', () => {
