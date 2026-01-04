@@ -24,7 +24,7 @@ window.DataFetcher = (function() {
      * Entries sheet: Contains all lottery ticket registrations
      * Columns: Timestamp, Platform, Game ID, WhatsApp, Chosen Numbers, Draw Date, Contest, Ticket #, Status
      */
-    const ENTRIES_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1OttNYHiecAuGG6IRX7lW6lkG5ciEcL8gp3g6lNrN9H8/export?format=csv&gid=0';
+    const ENTRIES_SHEET_URL = 'https://docs.google.com/spreadsheets/d/14f_ipSqAq8KCP7aFrbIK9Ztbo33BnCw34DSk5ADdPgI/export?format=csv&gid=0&t=1767491207553';
     
     /**
      * Recharge sheet: Contains recharge transactions
@@ -177,21 +177,23 @@ window.DataFetcher = (function() {
      * @returns {Object} Parsed entry object
      */
     function parseEntryRow(row) {
-        // CSV Source: OLD POP SORTE - SORTE (8).csv
+        // CSV Source: SORTE-ADMIN.csv (SORTE ADMIN - SORTE.csv)
         // Column 0: DATA/HORA REGISTRO (Entry creation timestamp) - DD/MM/YYYY HH:MM:SS
-        // Column 1: PLATFORM
-        // Column 2: GAME ID (matches Member ID from recharge CSV)
-        // Column 3: WHATSAPP
-        // Column 4: NÚMEROS ESCOLHIDOS
-        // Column 5: DATA SORTEIO
-        // Column 6: CONCURSO
-        // Column 7: BILHETE #
-        // Column 8: STATUS
+        // Column 1: (empty/date)
+        // Column 2: (time)
+        // Column 3: PLATFORM
+        // Column 4: GAME ID (matches Member ID from recharge CSV)
+        // Column 5: WHATSAPP
+        // Column 6: NÚMEROS ESCOLHIDOS
+        // Column 7: DATA SORTEIO
+        // Column 8: CONCURSO
+        // Column 9: BILHETE #
+        // Column 10: STATUS
         const timestamp = row[0] || ''; // DATA/HORA REGISTRO
         const parsedDate = AdminCore.parseBrazilDateTime(timestamp);
         
         // Parse chosen numbers
-        const numbersRaw = row[4] || '';
+        const numbersRaw = row[6] || '';
         const numbers = numbersRaw
             .split(/[,;|\t]/)
             .map(n => parseInt(n.trim(), 10))
@@ -200,14 +202,14 @@ window.DataFetcher = (function() {
         return {
             timestamp: timestamp,
             parsedDate: parsedDate,
-            platform: (row[1] || 'POPN1').trim().toUpperCase(),
-            gameId: (row[2] || '').trim(),
-            whatsapp: (row[3] || '').trim(),
+            platform: (row[3] || 'POPN1').trim().toUpperCase(),
+            gameId: (row[4] || '').trim(),
+            whatsapp: (row[5] || '').trim(),
             numbers: numbers,
-            drawDate: (row[5] || '').trim(),
-            contest: (row[6] || '').trim(),
-            ticketNumber: (row[7] || '').trim(),
-            status: (row[8] || 'PENDING').trim().toUpperCase()
+            drawDate: (row[7] || '').trim(),
+            contest: (row[8] || '').trim(),
+            ticketNumber: (row[9] || '').trim(),
+            status: (row[10] || 'PENDING').trim().toUpperCase()
         };
     }
 
