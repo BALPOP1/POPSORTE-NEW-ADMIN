@@ -22,7 +22,8 @@ window.DataFetcher = (function() {
     
     /**
      * Entries sheet: Contains all lottery ticket registrations
-     * Columns: Timestamp, Platform, Game ID, WhatsApp, Chosen Numbers, Draw Date, Contest, Ticket #, Status
+     * Source: SORTE-ADMIN.csv
+     * Columns: DATA/HORA REGISTRO, PLATFORM, GAME ID, WHATSAPP, NÚMEROS ESCOLHIDOS, DATA SORTEIO, CONCURSO, BILHETE #, STATUS
      */
     const ENTRIES_SHEET_URL = 'https://docs.google.com/spreadsheets/d/14f_ipSqAq8KCP7aFrbIK9Ztbo33BnCw34DSk5ADdPgI/export?format=csv&gid=0&t=1767491207553';
     
@@ -177,10 +178,10 @@ window.DataFetcher = (function() {
      * @returns {Object} Parsed entry object
      */
     function parseEntryRow(row) {
-        // CSV Source: SORTE-ADMIN.csv (SORTE ADMIN - SORTE.csv)
+        // CSV Source: SORTE-ADMIN.csv
         // Column 0: DATA/HORA REGISTRO (Entry creation timestamp) - DD/MM/YYYY HH:MM:SS
-        // Column 1: (empty/date)
-        // Column 2: (time)
+        // Column 1: (empty)
+        // Column 2: (empty)
         // Column 3: PLATFORM
         // Column 4: GAME ID (matches Member ID from recharge CSV)
         // Column 5: WHATSAPP
@@ -228,7 +229,6 @@ window.DataFetcher = (function() {
 
         // Return cached data if fetch is in progress - don't block, just use cache
         if (fetchLock.entries) {
-            console.log('Entries fetch already in progress, using cached data');
             return cache.entries.data || [];
         }
 
@@ -249,15 +249,20 @@ window.DataFetcher = (function() {
 
             // Parse CSV in batches to avoid blocking UI
             const batchSize = 500;
+            const totalLines = lines.length - 1; // Exclude header
             for (let i = 1; i < lines.length; i += batchSize) {
                 const batch = lines.slice(i, Math.min(i + batchSize, lines.length));
                 
                 for (const line of batch) {
                     const row = AdminCore.parseCSVLine(line, delimiter);
-                    if (row.length >= 9 && row[2]) { // Must have at least Game ID
+                    if (row.length >= 11 && row[4]) { // Must have at least Game ID (column 4)
                         entries.push(parseEntryRow(row));
                     }
                 }
+                
+                // Update loading progress
+                const progress = Math.min(100, Math.round(((i + batchSize - 1) / totalLines) * 100));
+                AdminCore.updateLoadingProgress(progress, `Loading entries... ${progress}%`);
                 
                 // Yield to UI thread after each batch
                 if (i + batchSize < lines.length) {
@@ -286,7 +291,6 @@ window.DataFetcher = (function() {
             return entries;
 
         } catch (error) {
-            console.error('Error fetching entries:', error);
             fetchLock.entries = false;
             // Return cached data if available, even if stale
             if (cache.entries.data) {

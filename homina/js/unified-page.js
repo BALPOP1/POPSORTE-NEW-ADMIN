@@ -274,7 +274,7 @@ window.UnifiedPage = (function() {
             <tr>
                 <td><span class="badge badge-${index < 3 ? 'warning' : 'info'}">${index + 1}</span></td>
                 <td><strong>${entrant.gameId}</strong></td>
-                <td>${AdminCore.maskWhatsApp(entrant.whatsapp)}</td>
+                <td>${entrant.whatsapp || ''}</td>
                 <td>${entrant.count.toLocaleString()}</td>
             </tr>
         `).join('');
@@ -326,7 +326,7 @@ window.UnifiedPage = (function() {
             document.getElementById('statTotalWinners').textContent = winnerStats.totalWinners.toLocaleString();
             document.getElementById('statWinRate').textContent = `${winnerStats.winRate}%`;
         } catch (error) {
-            console.error('Error rendering winners stats:', error);
+            // Error handling - silent fail
         }
     }
 
@@ -337,18 +337,7 @@ window.UnifiedPage = (function() {
     async function renderEntries() {
         const { entries, recharges, allRecharges, validationResults } = currentData;
         
-        // Debug: Check data availability
-        console.log('renderEntries: entries=', entries.length, 'recharges=', recharges.length, 'allRecharges=', allRecharges.length);
-        console.log('renderEntries: validationResults=', validationResults ? 'available' : 'MISSING');
-        
-        if (validationResults && entries.length > 0) {
-            const sampleEntry = entries[0];
-            console.log('renderEntries: Sample entry:', {
-                ticketNumber: sampleEntry.ticketNumber,
-                gameId: sampleEntry.gameId,
-                hasBoundRecharge: !!sampleEntry.boundRecharge
-            });
-        }
+        // Data loaded and ready for rendering
         
         // Stats - ✅ COUNT DIRECTLY FROM CSV STATUS COLUMN + CUTOFF DETECTION
         const validCount = entries.filter(e => {
@@ -397,7 +386,7 @@ window.UnifiedPage = (function() {
                 if (v.status === 'VALID') validCount++;
                 if (v.status === 'INVALID') invalidCount++;
             });
-            console.log(`Validation map built: ${validationMap.size} unique ticket numbers (${validCount} valid, ${invalidCount} invalid)`);
+            // Validation map built
         }
         
         // Populate filter options
@@ -699,7 +688,7 @@ window.UnifiedPage = (function() {
      * ENFORCES 2-DAY LIMIT: Recharge cannot be used for Day 3+ tickets!
      * 
      * IMPORTANT:
-     * - ticketTime: Uses "DATA/HORA REGISTRO" from SORTE-ADMIN.csv (Column 0)
+     * - ticketTime: Uses "DATA/HORA REGISTRO" from OLD POP SORTE - SORTE (8).csv (Column 0)
      * - rechargeTime: Uses "Record Time" from RECHARGE POPN1 - Sheet1 (7).csv (Column 5)
      * 
      * @param {Date} ticketTime - When the ticket was created (from entries CSV)
@@ -730,32 +719,6 @@ window.UnifiedPage = (function() {
         const windowEndMs = window.endDate.getTime();
         
         const isWithinWindow = ticketTimeMs >= windowStartMs && ticketTimeMs <= windowEndMs;
-        
-        // DEBUG: Log detailed eligibility check for troubleshooting
-        // Enable for dates around Jan 2-3, 2026 (the problematic range)
-        const ticketYear = ticketTime.getFullYear();
-        const ticketMonth = ticketTime.getMonth();
-        const ticketDay = ticketTime.getDate();
-        const DEBUG_CHECK = (ticketYear === 2026 && ticketMonth === 0 && (ticketDay === 2 || ticketDay === 3));
-        
-        if (DEBUG_CHECK) {
-            const ticketStr = AdminCore.formatBrazilDateTime(ticketTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
-            const rechargeStr = AdminCore.formatBrazilDateTime(rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
-            const windowStartStr = AdminCore.formatBrazilDateTime(window.startDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
-            const windowEndStr = AdminCore.formatBrazilDateTime(window.endDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
-            console.log(`   📅 Eligibility Check:`);
-            console.log(`      Ticket: ${ticketStr} (${ticketTimeMs})`);
-            console.log(`      Recharge: ${rechargeStr} (${rechargeTime.getTime()})`);
-            console.log(`      Window: ${windowStartStr} (${windowStartMs}) to ${windowEndStr} (${windowEndMs})`);
-            console.log(`      Result: ${isWithinWindow ? '✅ ELIGIBLE' : '❌ NOT ELIGIBLE'}`);
-            if (!isWithinWindow) {
-                const diffBefore = ticketTimeMs - windowStartMs;
-                const diffAfter = ticketTimeMs - windowEndMs;
-                console.log(`      Diff from start: ${diffBefore}ms (${(diffBefore / 1000 / 60 / 60).toFixed(2)} hours)`);
-                console.log(`      Diff from end: ${diffAfter}ms (${(diffAfter / 1000 / 60 / 60).toFixed(2)} hours)`);
-            }
-        }
-        
         return isWithinWindow;
     }
     
@@ -862,14 +825,14 @@ window.UnifiedPage = (function() {
                 
                 // DEBUG: Verify it's not already bound
                 if (boundOrderNumbers.has(orderToAdd)) {
-                    console.error(`🚨 BUG! Trying to bind already-bound order: ${orderToAdd.substring(0, 20)}...`);
+                    // Order already bound - skip
                 }
                 
                 boundOrderNumbers.add(orderToAdd);
                 
                 // DEBUG: Verify it was added
                 if (!boundOrderNumbers.has(orderToAdd)) {
-                    console.error(`🚨 BUG! Failed to add order to boundOrderNumbers: ${orderToAdd.substring(0, 20)}...`);
+                    // Failed to add order - skip
                 }
                 
                 // USE UNIQUE KEY: gameId + timestamp (ticket number is irrelevant!)
@@ -1023,7 +986,7 @@ window.UnifiedPage = (function() {
     function renderEntriesTable() {
         const tbody = document.getElementById('entriesTableBody');
         if (!tbody) {
-            console.error('❌ entriesTableBody element not found!');
+            // Table body not found
             return;
         }
         
@@ -1087,7 +1050,7 @@ window.UnifiedPage = (function() {
             // 2. Ticket created on Day 2 (any time) → CUTOFF (participates Day 2)
             // IMPORTANT:
             // - rechargeTime: From "Record Time" in RECHARGE POPN1 - Sheet1 (7).csv (Column 5)
-            // - ticketTime: From "DATA/HORA REGISTRO" in SORTE-ADMIN.csv (Column 0)
+            // - ticketTime: From "DATA/HORA REGISTRO" in OLD POP SORTE - SORTE (8).csv (Column 0)
             // - CUTOFF badge means "participates in Day 2 draw" but ticket is still VALID!
             let isCutoff = false;
             if (bruteForceMatch && entry.parsedDate) {
@@ -1127,29 +1090,18 @@ window.UnifiedPage = (function() {
                         const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
                             year: 'numeric',
                             month: '2-digit',
-                            day: '2-digit',
+                                day: '2-digit', 
                             hour: '2-digit',
                             minute: '2-digit'
                         });
                         const ticketTimeStr = AdminCore.formatBrazilDateTime(ticketTime, {
                             year: 'numeric',
-                            month: '2-digit',
+                                month: '2-digit', 
                             day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                        });
-                        console.log(`🔍 CUTOFF DEBUG GameID=${entry.gameId}:`);
-                        console.log(`   Recharge: ${rechargeDateStr}`);
-                        console.log(`   Eligibility Days: Day1=${eligibilityDay1DateStr}, Day2=${eligibilityDay2DateStr}`);
-                        console.log(`   Participation Days: Day1=${participationDay1DateStr}, Day2=${participationDay2DateStr}`);
-                        console.log(`   Ticket: ${ticketTimeStr} (Date=${ticketDateStr})`);
-                        console.log(`   isOnEligibilityDay1=${isOnEligibilityDay1}, isOnEligibilityDay2=${isOnEligibilityDay2}`);
-                        console.log(`   hasDay2Participation=${hasDay2Participation}`);
-                        if (isOnEligibilityDay1) {
-                            const ticketHourStr = AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'});
-                            const ticketHour = parseInt(ticketHourStr, 10);
-                            console.log(`   Ticket hour: ${ticketHour} (>=20? ${ticketHour >= 20})`);
-                        }
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                            });
+                        // Cutoff debug disabled
                     }
                     
                     if (isOnEligibilityDay1) {
@@ -1200,7 +1152,7 @@ window.UnifiedPage = (function() {
             
             // SAFETY CHECK: Verify Game IDs match (should always be true)
             if (bruteForceMatch && bruteForceMatch.gameId !== entry.gameId) {
-                console.error(`❌ GAME ID MISMATCH! Entry=${entry.gameId}, Recharge=${bruteForceMatch.gameId}`);
+                // Game ID mismatch detected
             }
             
             // Show recharge info if has a match (whether originally valid or upgraded)
@@ -1227,8 +1179,8 @@ window.UnifiedPage = (function() {
                 </div>`;
             }
             
-            // WhatsApp masked display
-            const whatsappDisplay = AdminCore.maskWhatsApp(entry.whatsapp);
+            // WhatsApp full display (no masking)
+            const whatsappDisplay = entry.whatsapp || '';
             
             // Format draw date
             const formattedDrawDate = formatDrawDate(entry.drawDate);
@@ -1249,9 +1201,9 @@ window.UnifiedPage = (function() {
             `;
             }).join('');
             
-            console.log('✅ Table HTML generated successfully');
+            // Table HTML generated
         } catch (error) {
-            console.error('❌ ERROR rendering table:', error);
+            // Error rendering table
             tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error loading entries. Check console for details.</td></tr>';
         }
     }
@@ -1590,7 +1542,7 @@ window.UnifiedPage = (function() {
             renderWinnersTable();
             
         } catch (error) {
-            console.error('Error calculating winners:', error);
+            // Error calculating winners
             document.getElementById('winnersTableBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error calculating winners</td></tr>';
         }
     }
@@ -1743,7 +1695,7 @@ window.UnifiedPage = (function() {
     // ============================================
     
     async function loadAllData(forceRefresh = false) {
-        console.log('UnifiedPage: Loading all data...');
+        // Loading all data
         
         try {
             await DataStore.loadData(forceRefresh);
@@ -1763,20 +1715,7 @@ window.UnifiedPage = (function() {
             const skipCache = platform !== 'ALL';
             currentData.validationResults = await RechargeValidator.validateAllTickets(currentData.entries, currentData.allRecharges, skipCache);
             
-            console.log('UnifiedPage: Data loaded -', currentData.entries.length, 'entries,', currentData.recharges.length, 'recharges for platform:', platform);
-            console.log('UnifiedPage: Total recharges (all platforms):', currentData.allRecharges.length);
-            console.log('UnifiedPage: Validation results:', currentData.validationResults);
-            
-            // Debug: Check first few validation results
-            if (currentData.validationResults && currentData.validationResults.results) {
-                const sampleResults = currentData.validationResults.results.slice(0, 5);
-                console.log('UnifiedPage: Sample validation results:', sampleResults.map(v => ({
-                    ticket: v.ticket?.ticketNumber,
-                    status: v.status,
-                    hasRecharge: !!v.matchedRecharge,
-                    rechargeAmount: v.matchedRecharge?.amount
-                })));
-            }
+            // Data loaded successfully
             
             // BRUTE FORCE: Match recharges ONCE when data is loaded
             bruteForceMatchRecharges();
@@ -1788,7 +1727,7 @@ window.UnifiedPage = (function() {
             renderWinners();
             
         } catch (error) {
-            console.error('UnifiedPage: Error loading data:', error);
+            // Error loading data
             AdminCore.showToast('Error loading data: ' + error.message, 'error');
         }
     }
@@ -1866,7 +1805,7 @@ window.UnifiedPage = (function() {
     // ============================================
     
     function init() {
-        console.log('UnifiedPage: Initializing...');
+        // Initializing
         
         bindEvents();
         
@@ -1879,20 +1818,20 @@ window.UnifiedPage = (function() {
     // Event listeners
     if (typeof AdminCore !== 'undefined') {
         AdminCore.on('refresh', () => {
-            console.log('UnifiedPage: Refresh event received');
+            // Refresh event received
             loadAllData(true);
         });
         
         AdminCore.on('dataStoreReady', ({ fromCache }) => {
             // Only reload if data came from network (not cache)
             if (!fromCache && isInitialized) {
-                console.log('UnifiedPage: Fresh data ready, re-rendering');
+                // Fresh data ready, re-rendering
                 loadAllData(false); // Don't force refresh again, just re-render
             }
         });
         
         AdminCore.on('platformChange', ({ platform }) => {
-            console.log('UnifiedPage: Platform changed to', platform);
+            // Platform changed
             loadAllData(false); // Re-render with new platform filter
         });
     }

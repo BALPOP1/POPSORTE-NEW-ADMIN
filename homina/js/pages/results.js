@@ -186,10 +186,45 @@ window.ResultsPage = (function() {
                 sourceBadge = '<span class="badge badge-gray">Manual</span>';
             }
             
+            // Format draw date as "Day, Date Month Year" (e.g., "Monday, 22 December 2025")
+            let formattedDrawDate = '-';
+            if (result.drawDate) {
+                try {
+                    // Try to parse the date - could be DD/MM/YYYY or "Mon, 22 Dec 2025" format
+                    let dateObj = null;
+                    if (result.drawDateParsed) {
+                        dateObj = result.drawDateParsed;
+                    } else {
+                        // Try parsing DD/MM/YYYY format
+                        const parts = result.drawDate.split('/');
+                        if (parts.length === 3) {
+                            const [d, m, y] = parts.map(Number);
+                            dateObj = new Date(y, m - 1, d);
+                        }
+                    }
+                    
+                    if (dateObj && !isNaN(dateObj.getTime())) {
+                        // Format as "Day, Date Month Year" in Brazilian timezone
+                        formattedDrawDate = AdminCore.formatBrazilDateTime(dateObj, {
+                            weekday: 'long',
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric'
+                        });
+                        // Capitalize first letter
+                        formattedDrawDate = formattedDrawDate.charAt(0).toUpperCase() + formattedDrawDate.slice(1);
+                    } else {
+                        formattedDrawDate = result.drawDate;
+                    }
+                } catch (e) {
+                    formattedDrawDate = result.drawDate;
+                }
+            }
+            
             return `
                 <tr>
                     <td><strong>#${result.contest}</strong></td>
-                    <td>${result.drawDate || '-'}</td>
+                    <td>${formattedDrawDate}</td>
                     <td><div class="numbers-display">${numbersHtml}</div></td>
                     <td style="font-size: 0.8rem;">${result.savedAt || '-'}</td>
                     <td>${sourceBadge}</td>

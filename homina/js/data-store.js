@@ -248,7 +248,6 @@ window.DataStore = (function() {
     async function loadData(forceRefresh = false) {
         // If already loading, return current state
         if (state.loading) {
-            console.log('DataStore: Already loading, returning current counts');
             return state.counts;
         }
 
@@ -259,7 +258,6 @@ window.DataStore = (function() {
         if (isFirstLoad) {
             const hasCache = loadFromStorage();
             if (hasCache) {
-                console.log('DataStore: Showing cached data immediately, will refresh from network');
                 AdminCore.emit('dataStoreReady', { fromCache: true, counts: state.counts });
             }
         }
@@ -270,21 +268,26 @@ window.DataStore = (function() {
         const shouldFetchFromNetwork = isFirstLoad || forceRefresh || cacheExpired;
         
         if (!shouldFetchFromNetwork && state.loaded) {
-            console.log('DataStore: Using existing data (cache still valid)');
             return state.counts;
         }
 
-        console.log('DataStore: Fetching fresh data from network...');
+        // Show loading overlay with progress
+        AdminCore.showLoading('Loading data...');
+        AdminCore.updateLoadingProgress(0, 'Starting...');
         state.loading = true;
 
         try {
-            // Fetch all data in parallel - ALWAYS force refresh on first load
-            const [entries, recharges, results] = await Promise.all([
-                DataFetcher.fetchEntries(isFirstLoad || forceRefresh),
-                DataFetcher.fetchRecharges(isFirstLoad || forceRefresh),
-                ResultsFetcher.fetchResults(isFirstLoad || forceRefresh)
-            ]);
+            // Fetch all data with progress updates
+            AdminCore.updateLoadingProgress(10, 'Fetching entries...');
+            const entries = await DataFetcher.fetchEntries(isFirstLoad || forceRefresh);
+            
+            AdminCore.updateLoadingProgress(40, 'Fetching recharges...');
+            const recharges = await DataFetcher.fetchRecharges(isFirstLoad || forceRefresh);
+            
+            AdminCore.updateLoadingProgress(70, 'Fetching results...');
+            const results = await ResultsFetcher.fetchResults(isFirstLoad || forceRefresh);
 
+            AdminCore.updateLoadingProgress(90, 'Processing data...');
             state.entries = entries;
             state.recharges = recharges;
             state.results = results;
@@ -298,16 +301,19 @@ window.DataStore = (function() {
             // Calculate quick counts
             calculateQuickCounts();
 
-            console.log('DataStore: Fresh data loaded -', state.entries.length, 'entries');
-
+            AdminCore.updateLoadingProgress(100, 'Complete!');
+            
             // Save to localStorage for next visit
             saveToStorage();
 
             AdminCore.emit('dataStoreReady', { fromCache: false, counts: state.counts });
 
+            // Hide loading after a brief delay
+            setTimeout(() => AdminCore.hideLoading(), 300);
+
             return state.counts;
         } catch (error) {
-            console.error('DataStore load error:', error);
+            AdminCore.hideLoading();
             throw error;
         } finally {
             state.loading = false;
