@@ -1404,18 +1404,175 @@ window.UnifiedPage = (function() {
             return;
         }
         
-        const headers = ['Status', 'Date/Time', 'Platform', 'Game ID', 'Numbers', 'Contest', 'Ticket #'];
+        const headers = ['Validity', 'Registration Date', 'Registration Time', 'Platform', 'Game ID', 'WhatsApp', 'Chosen Numbers', 'Draw Date', 'Contest', 'Ticket #', 'Bound Recharge ID', 'Recharge Time', 'Recharge Amount', 'Invalid Reason', 'Cutoff Flag'];
+        
         const rows = filteredEntries.map(entry => {
-            // ✅ READ STATUS DIRECTLY FROM CSV (Column H - STATUS)
+            // Get CSV status
             const csvStatus = (entry.status || 'UNKNOWN').toUpperCase();
+            
+            // Get brute force matched recharge
+            const lookupKey = `${entry.gameId}-${entry.parsedDate ? entry.parsedDate.getTime() : 0}`;
+            const bruteForceMatch = entryRechargeMap.get(lookupKey);
+            
+            // Determine final validity status
+            const isOriginallyValid = (csvStatus === 'VALID' || csvStatus === 'VÁLIDO');
+            const isValidEntry = isOriginallyValid || (bruteForceMatch && bruteForceMatch.wasUpgraded);
+            const validity = isValidEntry ? 'VALID' : csvStatus;
+            
+            // Parse registration date/time
+            let registrationDate = '';
+            let registrationTime = '';
+            if (entry.parsedDate) {
+                // Format date as "D Month YYYY" (e.g., "3 January 2026") using English locale
+                const dateStr = entry.parsedDate.toLocaleString('en-US', {
+                    timeZone: 'America/Sao_Paulo',
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                });
+                // Format: "January 3, 2026" -> "3 January 2026"
+                const parts = dateStr.split(' ');
+                if (parts.length === 3) {
+                    const month = parts[0];
+                    const day = parts[1].replace(',', '');
+                    const year = parts[2];
+                    registrationDate = `${day} ${month} ${year}`;
+                } else {
+                    registrationDate = dateStr;
+                }
+                
+                // Format time as HH:MM:SS in Brazilian timezone
+                registrationTime = entry.parsedDate.toLocaleString('en-US', {
+                    timeZone: 'America/Sao_Paulo',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                });
+            } else if (entry.timestamp) {
+                // Fallback: try to parse from timestamp string
+                const parts = entry.timestamp.split(' ');
+                if (parts.length >= 2) {
+                    registrationDate = parts[0];
+                    registrationTime = parts[1];
+                }
+            }
+            
+            // Format draw date as YYYY-MM-DD
+            let drawDate = '';
+            if (entry.drawDate) {
+                // Try to parse draw date
+                try {
+                    // Could be "Mon, 22 Dec 2025" or "2026-01-05" or "05/01/2026"
+                    if (entry.drawDate.includes('-')) {
+                        drawDate = entry.drawDate.split(' ')[0]; // Take first part if space-separated
+                    } else if (entry.drawDate.includes('/')) {
+                        const [d, m, y] = entry.drawDate.split('/');
+                        drawDate = `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+                    } else {
+                        // Try parsing as date
+                        const parsed = new Date(entry.drawDate);
+                        if (!isNaN(parsed.getTime())) {
+                            const year = parsed.getFullYear();
+                            const month = String(parsed.getMonth() + 1).padStart(2, '0');
+                            const day = String(parsed.getDate()).padStart(2, '0');
+                            drawDate = `${year}-${month}-${day}`;
+                        } else {
+                            drawDate = entry.drawDate;
+                        }
+                    }
+                } catch (e) {
+                    drawDate = entry.drawDate;
+                }
+            }
+            
+            // Get recharge info
+            let boundRechargeId = '';
+            let rechargeTime = '';
+            let rechargeAmount = '';
+            if (bruteForceMatch) {
+                boundRechargeId = bruteForceMatch.orderNumber || '';
+                if (bruteForceMatch.recordTime) {
+                    // Format as YYYY-MM-DD HH:MM:SS in Brazilian timezone
+                    const rt = bruteForceMatch.recordTime;
+                    // Get date components in Brazilian timezone
+                    const year = AdminCore.formatBrazilDateTime(rt, { year: 'numeric', timeZone: 'America/Sao_Paulo' });
+                    const month = AdminCore.formatBrazilDateTime(rt, { month: '2-digit', timeZone: 'America/Sao_Paulo' });
+                    const day = AdminCore.formatBrazilDateTime(rt, { day: '2-digit', timeZone: 'America/Sao_Paulo' });
+                    const hour = AdminCore.formatBrazilDateTime(rt, { hour: '2-digit', hour12: false, timeZone: 'America/Sao_Paulo' });
+                    const minute = AdminCore.formatBrazilDateTime(rt, { minute: '2-digit', timeZone: 'America/Sao_Paulo' });
+                    const second = AdminCore.formatBrazilDateTime(rt, { second: '2-digit', timeZone: 'America/Sao_Paulo' });
+                    rechargeTime = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+                }
+                rechargeAmount = bruteForceMatch.amount ? String(bruteForceMatch.amount) : '';
+            }
+            
+            // Determine invalid reason
+            let invalidReason = '';
+            if (!isValidEntry) {
+                if (csvStatus === 'INVALID' || csvStatus === 'INVÁLIDO') {
+                    // Check if ticket was before recharge
+                    if (bruteForceMatch && entry.parsedDate && bruteForceMatch.recordTime) {
+                        if (entry.parsedDate.getTime() < bruteForceMatch.recordTime.getTime()) {
+                            invalidReason = 'INVALID_TICKET_BEFORE_RECHARGE';
+                        } else {
+                            invalidReason = 'INVALID_RECHARGE_WINDOW_EXPIRED';
+                        }
+                    } else {
+                        invalidReason = 'INVALID_RECHARGE_WINDOW_EXPIRED';
+                    }
+                }
+            }
+            
+            // Determine cutoff flag
+            let cutoffFlag = 'NO';
+            if (bruteForceMatch && entry.parsedDate) {
+                const rechargeTime = bruteForceMatch.recordTime;
+                const ticketTime = entry.parsedDate;
+                const window = calculateEligibilityWindow(rechargeTime);
+                if (window) {
+                    const ticketDate = new Date(ticketTime);
+                    ticketDate.setUTCHours(0, 0, 0, 0);
+                    const eligDay1Date = new Date(window.eligibilityDay1);
+                    eligDay1Date.setUTCHours(0, 0, 0, 0);
+                    const eligDay2Date = new Date(window.eligibilityDay2);
+                    eligDay2Date.setUTCHours(0, 0, 0, 0);
+                    const partDay1Date = new Date(window.day1);
+                    partDay1Date.setUTCHours(0, 0, 0, 0);
+                    const partDay2Date = new Date(window.day2);
+                    partDay2Date.setUTCHours(0, 0, 0, 0);
+                    const isOnEligibilityDay1 = ticketDate.getTime() === eligDay1Date.getTime();
+                    const isOnEligibilityDay2 = ticketDate.getTime() === eligDay2Date.getTime();
+                    const hasDay2Participation = partDay1Date.getTime() !== partDay2Date.getTime();
+                    
+                    if (isOnEligibilityDay1 && hasDay2Participation) {
+                        const utcHour = ticketTime.getUTCHours();
+                        const brtHour = (utcHour - 3 + 24) % 24;
+                        if (brtHour >= 20) {
+                            cutoffFlag = 'YES';
+                        }
+                    } else if (isOnEligibilityDay2 && hasDay2Participation) {
+                        cutoffFlag = 'YES';
+                    }
+                }
+            }
+            
             return [
-                csvStatus,
-                entry.timestamp,
-                entry.platform,
-                entry.gameId,
+                validity,
+                registrationDate,
+                registrationTime,
+                entry.platform || '',
+                entry.gameId || '',
+                entry.whatsapp || '',
                 entry.numbers.join(', '),
-                entry.contest,
-                entry.ticketNumber
+                drawDate,
+                entry.contest || '',
+                entry.ticketNumber || '',
+                boundRechargeId,
+                rechargeTime,
+                rechargeAmount,
+                invalidReason,
+                cutoffFlag
             ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
         });
         
@@ -1423,7 +1580,7 @@ window.UnifiedPage = (function() {
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `entries_${AdminCore.getBrazilDateString(new Date())}.csv`;
+        link.download = `entries_export_${new Date().toISOString().replace(/:/g, '_')}.csv`;
         link.click();
         
         AdminCore.showToast(`${filteredEntries.length} entries exported`, 'success');
