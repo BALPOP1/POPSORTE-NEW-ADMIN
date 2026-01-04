@@ -1990,13 +1990,29 @@ window.UnifiedPage = (function() {
 
     // Event listeners
     if (typeof AdminCore !== 'undefined') {
+        // Only initialize when app is shown (after login or if already authenticated)
+        AdminCore.on('appShown', () => {
+            if (!isInitialized) {
+                init();
+            }
+        });
+        
+        // Also listen for login event (in case appShown isn't emitted)
+        AdminCore.on('login', () => {
+            if (!isInitialized) {
+                init();
+            }
+        });
+        
         AdminCore.on('refresh', () => {
             // Refresh event received
-            loadAllData(true);
+            if (isInitialized) {
+                loadAllData(true);
+            }
         });
         
         AdminCore.on('dataStoreReady', ({ fromCache }) => {
-            // Only reload if data came from network (not cache)
+            // Only reload if data came from network (not cache) and already initialized
             if (!fromCache && isInitialized) {
                 // Fresh data ready, re-rendering
                 loadAllData(false); // Don't force refresh again, just re-render
@@ -2005,16 +2021,15 @@ window.UnifiedPage = (function() {
         
         AdminCore.on('platformChange', ({ platform }) => {
             // Platform changed
-            loadAllData(false); // Re-render with new platform filter
+            if (isInitialized) {
+                loadAllData(false); // Re-render with new platform filter
+            }
         });
-    }
-
-    // Auto-init when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        // Small delay to ensure AdminCore is ready
-        setTimeout(init, 50);
+        
+        // Reset initialization on logout
+        AdminCore.on('logout', () => {
+            isInitialized = false;
+        });
     }
 
     // ============================================

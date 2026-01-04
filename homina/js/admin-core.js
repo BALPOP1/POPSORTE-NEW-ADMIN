@@ -800,9 +800,11 @@ window.AdminCore = (function() {
                 initScrollNav();
                 initPlatformSwitcher();
                 navigationInitialized = true;
-                console.log('Navigation and platform switcher initialized via showApp()');
             }, 50);
         }
+        
+        // Emit appShown event so UnifiedPage can initialize
+        emit('appShown', {});
     }
 
     /**
@@ -872,7 +874,7 @@ window.AdminCore = (function() {
      * Initialize core module
      */
     function init() {
-        console.log('AdminCore: Initializing...');
+        // AdminCore initializing
         
         // Sidebar toggle
         const sidebarToggle = document.getElementById('sidebarToggle');
@@ -916,7 +918,7 @@ window.AdminCore = (function() {
             showLogin();
         }
         
-        console.log('AdminCore: Initialized');
+        // AdminCore initialized
     }
 
     // Initialize when DOM is ready
