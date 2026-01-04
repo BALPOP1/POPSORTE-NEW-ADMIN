@@ -260,9 +260,10 @@ window.DataFetcher = (function() {
                     }
                 }
                 
-                // Update loading progress
-                const progress = Math.min(100, Math.round(((i + batchSize - 1) / totalLines) * 100));
-                AdminCore.updateLoadingProgress(progress, `Loading entries... ${progress}%`);
+                // Update loading progress (scaled to 5-25% of total)
+                const parseProgress = Math.min(100, Math.round(((i + batchSize - 1) / totalLines) * 100));
+                const totalProgress = 5 + Math.round((parseProgress / 100) * 20); // 5% to 25%
+                AdminCore.updateLoadingProgress(totalProgress, `Parsing entries... ${parseProgress}%`);
                 
                 // Yield to UI thread after each batch
                 if (i + batchSize < lines.length) {
@@ -352,27 +353,9 @@ window.DataFetcher = (function() {
                 return `${day}/${month}/${y} ${hour}:${mm}:${second}`;
             });
             
-            // DEBUG: Log original and normalized for troubleshooting
-            if (timestampStr !== normalizedTime) {
-                console.log(`🔄 Normalized recharge time: "${timestampStr}" → "${normalizedTime}"`);
-            }
-            
             // Use AdminCore.parseBrazilDateTime for proper timezone handling
             // This function handles DD/MM/YYYY HH:MM:SS format correctly
             rechargeTime = AdminCore.parseBrazilDateTime(normalizedTime);
-            
-            // DEBUG: Log parsing result
-            if (rechargeTime) {
-                const debugStr = AdminCore.formatBrazilDateTime(rechargeTime, {
-                    day: '2-digit', month: '2-digit', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
-                });
-                if (timestampStr.includes('13:58') || timestampStr.includes('02:58')) {
-                    console.log(`🕐 Parsed recharge: "${timestampStr}" → "${normalizedTime}" → Display: "${debugStr}"`);
-                }
-            } else {
-                console.warn(`⚠️ Failed to parse recharge time: "${timestampStr}"`);
-            }
         }
         
         // Validate date
@@ -420,7 +403,6 @@ window.DataFetcher = (function() {
 
         // Return cached data if fetch is in progress - don't block, just use cache
         if (fetchLock.recharges) {
-            console.log('Recharges fetch already in progress, using cached data');
             return cache.recharges.data || [];
         }
 
@@ -429,19 +411,12 @@ window.DataFetcher = (function() {
         try {
             const csvText = await fetchCSV(RECHARGE_SHEET_URL);
             const lines = csvText.split(/\r?\n/).filter(Boolean);
-
-            console.log(`Recharge sheet: ${lines.length} lines loaded`);
             
             if (lines.length <= 1) {
-                console.warn('Recharge sheet has no data rows');
                 cache.recharges = { data: [], timestamp: now };
                 fetchLock.recharges = false;
                 return [];
             }
-
-            // Log first few lines for debugging
-            console.log('Recharge sheet header:', lines[0]);
-            if (lines[1]) console.log('Recharge sheet first row:', lines[1]);
 
             const delimiter = AdminCore.detectDelimiter(lines[0]);
             const recharges = [];
@@ -457,25 +432,7 @@ window.DataFetcher = (function() {
                 }
             }
 
-            console.log(`Recharges parsed: ${recharges.length} valid, ${skippedRows} skipped`);
-            
-            // HARDCORE DEBUG: Show first 3 recharges in detail
-            if (recharges.length > 0) {
-                console.log('===== RECHARGE DATA INSPECTION =====');
-                recharges.slice(0, 3).forEach((r, i) => {
-                    console.log(`Recharge ${i + 1}:`, {
-                        gameId: r.gameId,
-                        rechargeId: r.rechargeId?.substring(0, 20),
-                        amount: r.amount,
-                        hasRechargeTime: !!r.rechargeTime,
-                        rechargeTimeIsDate: r.rechargeTime instanceof Date,
-                        rechargeTimeValid: r.rechargeTime instanceof Date ? !isNaN(r.rechargeTime.getTime()) : false,
-                        rechargeTimeString: r.rechargeTime ? r.rechargeTime.toString() : 'MISSING',
-                        rawRow: r.rawRow?.join(' | ')
-                    });
-                });
-                console.log('====================================');
-            }
+            // Recharges parsed successfully
 
             // Sort by timestamp descending
             recharges.sort((a, b) => {
@@ -489,7 +446,6 @@ window.DataFetcher = (function() {
             return recharges;
 
         } catch (error) {
-            console.error('Error fetching recharges:', error);
             fetchLock.recharges = false;
             if (cache.recharges.data) {
                 return cache.recharges.data;

@@ -271,23 +271,25 @@ window.DataStore = (function() {
             return state.counts;
         }
 
-        // Show loading overlay with progress
-        AdminCore.showLoading('Loading data...');
-        AdminCore.updateLoadingProgress(0, 'Starting...');
+        // Show loading overlay with progress (only if not already shown)
+        if (isFirstLoad || forceRefresh) {
+            AdminCore.showLoading('Loading data...');
+            AdminCore.updateLoadingProgress(0, 'Starting...');
+        }
         state.loading = true;
 
         try {
             // Fetch all data with progress updates
-            AdminCore.updateLoadingProgress(10, 'Fetching entries...');
+            AdminCore.updateLoadingProgress(5, 'Fetching entries...');
             const entries = await DataFetcher.fetchEntries(isFirstLoad || forceRefresh);
             
-            AdminCore.updateLoadingProgress(40, 'Fetching recharges...');
+            AdminCore.updateLoadingProgress(30, 'Fetching recharges...');
             const recharges = await DataFetcher.fetchRecharges(isFirstLoad || forceRefresh);
             
-            AdminCore.updateLoadingProgress(70, 'Fetching results...');
+            AdminCore.updateLoadingProgress(50, 'Fetching results...');
             const results = await ResultsFetcher.fetchResults(isFirstLoad || forceRefresh);
 
-            AdminCore.updateLoadingProgress(90, 'Processing data...');
+            AdminCore.updateLoadingProgress(60, 'Processing data...');
             state.entries = entries;
             state.recharges = recharges;
             state.results = results;
@@ -301,15 +303,14 @@ window.DataStore = (function() {
             // Calculate quick counts
             calculateQuickCounts();
 
-            AdminCore.updateLoadingProgress(100, 'Complete!');
+            AdminCore.updateLoadingProgress(65, 'Data ready...');
             
             // Save to localStorage for next visit
             saveToStorage();
 
             AdminCore.emit('dataStoreReady', { fromCache: false, counts: state.counts });
 
-            // Hide loading after a brief delay
-            setTimeout(() => AdminCore.hideLoading(), 300);
+            // DON'T hide loading here - let unified-page.js handle it after rendering
 
             return state.counts;
         } catch (error) {

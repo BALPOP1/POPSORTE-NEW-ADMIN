@@ -1698,8 +1698,13 @@ window.UnifiedPage = (function() {
         // Loading all data
         
         try {
+            // Ensure loading overlay is shown
+            AdminCore.showLoading('Loading data...');
+            AdminCore.updateLoadingProgress(0, 'Starting...');
+            
             await DataStore.loadData(forceRefresh);
             
+            AdminCore.updateLoadingProgress(65, 'Preparing data...');
             const platform = AdminCore.getCurrentPlatform();
             
             // Get platform-filtered data
@@ -1710,24 +1715,35 @@ window.UnifiedPage = (function() {
             currentData.allRecharges = DataStore.getAllRecharges(); // For validation across all platforms
             currentData.results = DataStore.getResults();
             
+            AdminCore.updateLoadingProgress(70, 'Validating tickets...');
             // Validate only the platform-filtered entries (using ALL recharges for validation lookup)
             // Skip cache when platform is not ALL, since cached results are for all entries
             const skipCache = platform !== 'ALL';
             currentData.validationResults = await RechargeValidator.validateAllTickets(currentData.entries, currentData.allRecharges, skipCache);
             
-            // Data loaded successfully
-            
+            AdminCore.updateLoadingProgress(80, 'Matching recharges...');
             // BRUTE FORCE: Match recharges ONCE when data is loaded
             bruteForceMatchRecharges();
             
-            // Render all sections
+            AdminCore.updateLoadingProgress(85, 'Rendering dashboard...');
             renderDashboard();
+            
+            AdminCore.updateLoadingProgress(90, 'Rendering entries...');
             renderEntries();
+            
+            AdminCore.updateLoadingProgress(95, 'Rendering results...');
             renderResults();
+            
+            AdminCore.updateLoadingProgress(98, 'Rendering winners...');
             renderWinners();
             
+            AdminCore.updateLoadingProgress(100, 'Complete!');
+            
+            // Hide loading after a brief delay to show completion
+            setTimeout(() => AdminCore.hideLoading(), 500);
+            
         } catch (error) {
-            // Error loading data
+            AdminCore.hideLoading();
             AdminCore.showToast('Error loading data: ' + error.message, 'error');
         }
     }
