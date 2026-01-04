@@ -39,7 +39,8 @@ window.UnifiedPage = (function() {
         gameId: '',
         whatsapp: '',
         contest: '',
-        validity: 'all'
+        validity: 'all',
+        orderNumber: ''
     };
     let sortBy = 'date-desc'; // Default: newest first
     
@@ -53,15 +54,67 @@ window.UnifiedPage = (function() {
             return false;
         }
         
-        const regHour = entry.parsedDate.getHours();
-        const month = entry.parsedDate.getMonth();
-        const day = entry.parsedDate.getDate();
+        // Get matched recharge for this entry
+        const lookupKey = `${entry.gameId}-${entry.parsedDate.getTime()}`;
+        const bruteForceMatch = entryRechargeMap.get(lookupKey);
         
-        // Check for early cutoff days (Dec 24, Dec 31)
-        const isEarlyCutoffDay = month === 11 && (day === 24 || day === 31);
-        const cutoffHour = isEarlyCutoffDay ? 16 : 20;
+        if (!bruteForceMatch || !bruteForceMatch.recordTime) {
+            return false;
+        }
         
-        return regHour >= cutoffHour;
+        const rechargeTime = bruteForceMatch.recordTime;
+        const ticketTime = entry.parsedDate;
+        
+        // Get eligibility window to determine Day 1 and Day 2
+        const window = calculateEligibilityWindow(rechargeTime);
+        if (!window) {
+            return false;
+        }
+        
+        // Compare dates directly (more efficient than string formatting)
+        // Normalize dates to midnight for comparison
+        const ticketDate = new Date(ticketTime);
+        ticketDate.setUTCHours(0, 0, 0, 0);
+        
+        const eligDay1Date = new Date(window.eligibilityDay1);
+        eligDay1Date.setUTCHours(0, 0, 0, 0);
+        
+        const eligDay2Date = new Date(window.eligibilityDay2);
+        eligDay2Date.setUTCHours(0, 0, 0, 0);
+        
+        const partDay1Date = new Date(window.day1);
+        partDay1Date.setUTCHours(0, 0, 0, 0);
+        
+        const partDay2Date = new Date(window.day2);
+        partDay2Date.setUTCHours(0, 0, 0, 0);
+        
+        // Check if ticket is on eligibility Day 1 or Day 2 (when tickets can be created)
+        const isOnEligibilityDay1 = ticketDate.getTime() === eligDay1Date.getTime();
+        const isOnEligibilityDay2 = ticketDate.getTime() === eligDay2Date.getTime();
+        
+        // Check if Day 2 participation exists and is different from Day 1 participation
+        const hasDay2Participation = partDay1Date.getTime() !== partDay2Date.getTime();
+        
+        if (isOnEligibilityDay1) {
+            // Ticket created on eligibility Day 1
+            // If Day 2 participation exists, check if ticket was created AFTER 8 PM
+            if (hasDay2Participation) {
+                // Get hour in Brazilian timezone
+                // parseBrazilDateTime stores dates as UTC with BRT hour + 3
+                // So BRT 20:36 → UTC 23:36
+                // To get BRT from UTC: UTC - 3 (with wraparound)
+                const utcHour = ticketTime.getUTCHours();
+                const brtHour = (utcHour - 3 + 24) % 24; // Convert UTC to BRT (subtract 3, handle wraparound)
+                return brtHour >= 20; // After 8 PM on eligibility Day 1 → CUTOFF
+            }
+            return false; // No Day 2 participation, no cutoff
+        } else if (isOnEligibilityDay2) {
+            // Ticket created on eligibility Day 2
+            // CUTOFF if Day 2 participation exists and is different from Day 1
+            return hasDay2Participation; // On eligibility Day 2 → CUTOFF only if Day 2 participation exists
+        }
+        
+        return false;
     }
     
     // Results state
@@ -369,6 +422,15 @@ window.UnifiedPage = (function() {
             const term = entriesFilters.whatsapp.toLowerCase();
             result = result.filter(e => (e.whatsapp || '').toLowerCase().includes(term));
         }
+        if (entriesFilters.orderNumber) {
+            const term = entriesFilters.orderNumber.toLowerCase();
+            result = result.filter(e => {
+                // Check if entry has a matched recharge with this order number
+                const lookupKey = `${e.gameId}-${e.parsedDate?.getTime()}`;
+                const match = entryRechargeMap.get(lookupKey);
+                return match && match.orderNumber.toLowerCase().includes(term);
+            });
+        }
         if (entriesFilters.contest) {
             result = result.filter(e => e.contest === entriesFilters.contest);
         }
@@ -459,68 +521,242 @@ window.UnifiedPage = (function() {
     let boundOrderNumbers = new Set(); // Track used order numbers
     let entryRechargeMap = new Map(); // Map ticket number to recharge info
     let lastMatchedDataSize = 0; // Track if data changed
+    let eligibilityWindowCache = new Map(); // Cache eligibility windows by recharge timestamp
+    
+    /**
+     * Check if a date is a no-draw day (Sunday, Dec 25, Jan 1)
+     * Uses Brazilian timezone for date checking
+     * @param {Date} date - Date to check
+     * @returns {boolean} True if no draw on this day
+     */
+    function isNoDrawDay(date) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) {
+            return false;
+        }
+        
+        // Use UTC date components (date is stored as UTC representing Brazilian time)
+        // Since dates are stored as UTC+3 (midnight BRT = 3 AM UTC), we need to adjust
+        const utcDate = new Date(date.getTime());
+        const utcYear = utcDate.getUTCFullYear();
+        const utcMonth = utcDate.getUTCMonth() + 1; // 1-12
+        const utcDay = utcDate.getUTCDate();
+        const utcDayOfWeek = utcDate.getUTCDay(); // 0 = Sunday
+        
+        // Sunday
+        if (utcDayOfWeek === 0) return true;
+        
+        // Christmas (Dec 25)
+        if (utcMonth === 12 && utcDay === 25) return true;
+        
+        // New Year (Jan 1)
+        if (utcMonth === 1 && utcDay === 1) return true;
+        
+        return false;
+    }
+    
+    /**
+     * Get next valid draw date from a given date, skipping no-draw days
+     * Uses Brazilian timezone for date checking
+     * @param {Date} fromDate - Starting date
+     * @returns {Date} Next valid draw date
+     */
+    function getNextValidDrawDate(fromDate) {
+        if (!(fromDate instanceof Date) || isNaN(fromDate.getTime())) {
+            return fromDate;
+        }
+        
+        // Start checking from the given date
+        let checkDate = new Date(fromDate);
+        checkDate.setUTCHours(12, 0, 0, 0); // Use noon UTC for day-of-week calculation
+        
+        // Check up to 14 days ahead
+        for (let i = 0; i < 14; i++) {
+            if (!isNoDrawDay(checkDate)) {
+                // Found valid draw date - return midnight BRT (3 AM UTC)
+                // Extract UTC date components directly (more efficient than formatting)
+                const year = checkDate.getUTCFullYear();
+                const month = checkDate.getUTCMonth() + 1;
+                const day = checkDate.getUTCDate();
+                return new Date(Date.UTC(year, month - 1, day, 3, 0, 0, 0));
+            }
+            
+            // Move to next day using Date object (handles month/year rollovers automatically)
+            checkDate.setUTCDate(checkDate.getUTCDate() + 1);
+        }
+        
+        // Fallback: return original date if no valid date found
+        return fromDate;
+    }
     
     /**
      * Calculate eligibility window for a recharge
-     * Returns { startDate, endDate } in Brazilian time
+     * Returns { startDate, endDate, day1, day2 } in Brazilian time
+     * 
+     * IMPORTANT: Uses "Record Time" from RECHARGE POPN1 - Sheet1 (7).csv (Column 5)
+     * 
+     * Rules:
+     * - If recharge BEFORE 8 PM: Day 1 = same day, Day 2 = next day
+     * - If recharge AFTER 8 PM: Day 1 = recharge day, Day 2 = tomorrow (FIXED)
+     * - Sunday/holidays (Dec 25, Jan 1) are skipped for draw days
+     * - Eligibility ends at 8 PM (20:00) on Day 2
+     * - NO tickets on Day 3+ can use this recharge!
      */
     function calculateEligibilityWindow(rechargeTime) {
-        const rechargeDate = new Date(rechargeTime);
-        const rechargeHour = parseInt(AdminCore.formatBrazilDateTime(rechargeDate, {hour: '2-digit'}));
+        if (!(rechargeTime instanceof Date) || isNaN(rechargeTime.getTime())) {
+            return null;
+        }
         
-        // Get recharge date at midnight Brazilian time
-        const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeDate, {
+        // Check cache first (performance optimization)
+        const cacheKey = rechargeTime.getTime();
+        if (eligibilityWindowCache.has(cacheKey)) {
+            return eligibilityWindowCache.get(cacheKey);
+        }
+        
+        // Get recharge hour in Brazilian timezone (CRITICAL for correct cutoff calculation)
+        const rechargeHourStr = AdminCore.formatBrazilDateTime(rechargeTime, {hour: '2-digit'});
+        const rechargeHour = parseInt(rechargeHourStr, 10);
+        
+        // Get recharge date string in Brazilian timezone for Day 1/Day 2 calculation
+        const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
             year: 'numeric',
             month: '2-digit',
             day: '2-digit'
         });
-        const [year, month, day] = rechargeDateStr.split('-').map(Number);
         
-        // Create date at midnight Brazilian time
-        const startOfRechargeDay = new Date(year, month - 1, day, 0, 0, 0);
+        // Parse recharge date components (DD/MM/YYYY)
+        const [rechargeDay, rechargeMonth, rechargeYear] = rechargeDateStr.split('/').map(Number);
         
-        let day1, day2;
+        // Create Day 1 and Day 2 ELIGIBILITY dates (calendar days - includes Sunday/holidays)
+        // These are when tickets CAN BE CREATED
+        let eligibilityDay1, eligibilityDay2;
         
         if (rechargeHour < 20) {
             // Recharge BEFORE 8 PM: Day 1 = same day, Day 2 = next day
-            day1 = new Date(startOfRechargeDay);
-            day2 = new Date(startOfRechargeDay);
-            day2.setDate(day2.getDate() + 1);
+            eligibilityDay1 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay, 3, 0, 0, 0)); // Midnight BRT
+            eligibilityDay2 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + 1, 3, 0, 0, 0)); // Next day midnight BRT
         } else {
-            // Recharge AFTER 8 PM: Day 1 = next day, Day 2 = day after next
-            day1 = new Date(startOfRechargeDay);
-            day1.setDate(day1.getDate() + 1);
-            day2 = new Date(startOfRechargeDay);
-            day2.setDate(day2.getDate() + 2);
+            // Recharge AFTER 8 PM: Day 1 = recharge day, Day 2 = tomorrow (FIXED)
+            eligibilityDay1 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay, 3, 0, 0, 0)); // Recharge day midnight BRT
+            eligibilityDay2 = new Date(Date.UTC(rechargeYear, rechargeMonth - 1, rechargeDay + 1, 3, 0, 0, 0)); // Tomorrow midnight BRT
         }
         
-        // Eligibility ends at 8 PM (20:00) on Day 2
-        const eligibilityEnd = new Date(day2);
-        eligibilityEnd.setHours(20, 0, 0, 0);
+        // Calculate PARTICIPATION days (draw days - skip Sunday/holidays)
+        // These are which draws tickets can participate in
+        let participationDay1, participationDay2;
         
-        return {
-            startDate: rechargeDate, // Starts from recharge time
-            endDate: eligibilityEnd, // Ends at 8 PM on Day 2
-            day1: day1,
-            day2: day2
+        // Day 1 participation: Skip no-draw days from eligibility Day 1
+        participationDay1 = getNextValidDrawDate(eligibilityDay1);
+        
+        // Day 2 participation: Next valid draw date AFTER Day 1 participation
+        const day1PartDateStr = AdminCore.formatBrazilDateTime(participationDay1, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const [day1PartDay, day1PartMonth, day1PartYear] = day1PartDateStr.split('/').map(Number);
+        const nextDayAfterPartDay1 = new Date(Date.UTC(day1PartYear, day1PartMonth - 1, day1PartDay + 1, 3, 0, 0, 0));
+        participationDay2 = getNextValidDrawDate(nextDayAfterPartDay1);
+        
+        // SPECIAL CASE: If eligibility Day 1 is a no-draw day (e.g., Sunday),
+        // then Day 2 participation should be the same as Day 1 participation (only one draw day)
+        const eligibilityDay1DateStr = AdminCore.formatBrazilDateTime(eligibilityDay1, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        if (isNoDrawDay(eligibilityDay1)) {
+            // If Day 1 eligibility is Sunday/holiday, Day 2 participation = Day 1 participation (only Monday draw)
+            participationDay2 = new Date(participationDay1);
+        }
+        
+        // Eligibility ends at 8 PM (20:00) on eligibility Day 2 (calendar day, not participation day)
+        const eligibilityDay2DateStr = AdminCore.formatBrazilDateTime(eligibilityDay2, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+        const [eligDay2Day, eligDay2Month, eligDay2Year] = eligibilityDay2DateStr.split('/').map(Number);
+        
+        // 8 PM BRT = 20:00 BRT = 23:00 UTC (BRT is UTC-3)
+        const eligibilityEnd = new Date(Date.UTC(eligDay2Year, eligDay2Month - 1, eligDay2Day, 23, 0, 0, 0));
+        
+        const window = {
+            startDate: rechargeTime, // Starts from recharge time
+            endDate: eligibilityEnd, // Ends at 8 PM on eligibility Day 2
+            day1: participationDay1, // Day 1 participation (draw day)
+            day2: participationDay2, // Day 2 participation (draw day)
+            eligibilityDay1: eligibilityDay1, // Day 1 eligibility (calendar day - when tickets can be created)
+            eligibilityDay2: eligibilityDay2  // Day 2 eligibility (calendar day - when tickets can be created)
         };
+        
+        // Cache the result
+        eligibilityWindowCache.set(cacheKey, window);
+        return window;
     }
     
     /**
      * Check if ticket time is within recharge eligibility window
      * ENFORCES 2-DAY LIMIT: Recharge cannot be used for Day 3+ tickets!
+     * 
+     * IMPORTANT:
+     * - ticketTime: Uses "DATA/HORA REGISTRO" from OLD POP SORTE - SORTE (8).csv (Column 0)
+     * - rechargeTime: Uses "Record Time" from RECHARGE POPN1 - Sheet1 (7).csv (Column 5)
+     * 
+     * @param {Date} ticketTime - When the ticket was created (from entries CSV)
+     * @param {Date} rechargeTime - When the recharge happened (from recharge CSV)
+     * @returns {boolean} - True if ticket is eligible (within 2-day window)
      */
     function isTicketEligible(ticketTime, rechargeTime) {
+        if (!(ticketTime instanceof Date) || isNaN(ticketTime.getTime())) {
+            return false;
+        }
+        if (!(rechargeTime instanceof Date) || isNaN(rechargeTime.getTime())) {
+            return false;
+        }
+        
         // Ticket must be AFTER recharge
         if (ticketTime.getTime() < rechargeTime.getTime()) {
             return false;
         }
         
         const window = calculateEligibilityWindow(rechargeTime);
+        if (!window) {
+            return false;
+        }
         
         // Check if ticket is within eligibility window (NOT Day 3+!)
-        return ticketTime.getTime() >= window.startDate.getTime() && 
-               ticketTime.getTime() <= window.endDate.getTime();
+        const ticketTimeMs = ticketTime.getTime();
+        const windowStartMs = window.startDate.getTime();
+        const windowEndMs = window.endDate.getTime();
+        
+        const isWithinWindow = ticketTimeMs >= windowStartMs && ticketTimeMs <= windowEndMs;
+        
+        // DEBUG: Log detailed eligibility check for troubleshooting
+        // Enable for dates around Jan 2-3, 2026 (the problematic range)
+        const ticketYear = ticketTime.getFullYear();
+        const ticketMonth = ticketTime.getMonth();
+        const ticketDay = ticketTime.getDate();
+        const DEBUG_CHECK = (ticketYear === 2026 && ticketMonth === 0 && (ticketDay === 2 || ticketDay === 3));
+        
+        if (DEBUG_CHECK) {
+            const ticketStr = AdminCore.formatBrazilDateTime(ticketTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            const rechargeStr = AdminCore.formatBrazilDateTime(rechargeTime, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            const windowStartStr = AdminCore.formatBrazilDateTime(window.startDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            const windowEndStr = AdminCore.formatBrazilDateTime(window.endDate, {day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+            console.log(`   📅 Eligibility Check:`);
+            console.log(`      Ticket: ${ticketStr} (${ticketTimeMs})`);
+            console.log(`      Recharge: ${rechargeStr} (${rechargeTime.getTime()})`);
+            console.log(`      Window: ${windowStartStr} (${windowStartMs}) to ${windowEndStr} (${windowEndMs})`);
+            console.log(`      Result: ${isWithinWindow ? '✅ ELIGIBLE' : '❌ NOT ELIGIBLE'}`);
+            if (!isWithinWindow) {
+                const diffBefore = ticketTimeMs - windowStartMs;
+                const diffAfter = ticketTimeMs - windowEndMs;
+                console.log(`      Diff from start: ${diffBefore}ms (${(diffBefore / 1000 / 60 / 60).toFixed(2)} hours)`);
+                console.log(`      Diff from end: ${diffAfter}ms (${(diffAfter / 1000 / 60 / 60).toFixed(2)} hours)`);
+            }
+        }
+        
+        return isWithinWindow;
     }
     
     /**
@@ -529,21 +765,19 @@ window.UnifiedPage = (function() {
      * ENFORCES 2-DAY ELIGIBILITY WINDOW - NO DAY 3+ TICKETS!
      */
     function bruteForceMatchRecharges() {
-        console.log('💪 BRUTE FORCE MATCHING START');
-        
         // Check if we need to rematch (data size changed)
         const currentDataSize = (currentData.entries?.length || 0) + (currentData.allRecharges?.length || 0);
         if (lastMatchedDataSize === currentDataSize && entryRechargeMap.size > 0) {
-            console.log('✅ Using cached matches (data unchanged)');
-            return;
+            return; // Use cached matches
         }
         lastMatchedDataSize = currentDataSize;
         
+        // Clear caches
         boundOrderNumbers.clear();
         entryRechargeMap.clear();
+        eligibilityWindowCache.clear(); // Clear eligibility window cache
         
         if (!currentData.allRecharges || currentData.allRecharges.length === 0) {
-            console.log('❌ No recharges available');
             return;
         }
         
@@ -551,11 +785,8 @@ window.UnifiedPage = (function() {
         const allEntries = currentData.entries || [];
         
         if (allEntries.length === 0) {
-            console.log('❌ No entries available');
             return;
         }
-        
-        console.log(`🔍 THREE-PHASE MATCHING: ${allEntries.length} entries against ${currentData.allRecharges.length} recharges`);
         
         // Sort entries by time (oldest first) for chronological binding
         const sortedEntries = [...allEntries].sort((a, b) => {
@@ -570,7 +801,10 @@ window.UnifiedPage = (function() {
         let phase3Count = 0;
         
         // PHASE 1: Match all VALID entries first
-        console.log('🔵 PHASE 1: Matching VALID entries...');
+        // DEBUG: Disabled for performance - enable only when troubleshooting
+        const DEBUG_ENABLED = false;
+        const DEBUG_GAME_IDS = ['3599051608', '3956778685'];
+        
         for (const entry of sortedEntries) {
             const csvStatus = (entry.status || '').toUpperCase();
             if (csvStatus !== 'VALID' && csvStatus !== 'VÁLIDO') {
@@ -591,24 +825,8 @@ window.UnifiedPage = (function() {
                 !boundOrderNumbers.has(r.rechargeId) // NOT already bound
             );
             
-            // DEBUG: Show filtering effect
-            if (matchCount < 3) {
-                console.log(`🔎 GameID=${entry.gameId}: Total recharges=${allGameIdRecharges.length}, Available (not bound)=${userRecharges.length}, Already bound=${allGameIdRecharges.length - userRecharges.length}`);
-            }
-            
             if (userRecharges.length === 0) {
-                if (matchCount < 3) {
-                    console.log(`⚠️ No available recharges for GameID=${entry.gameId}, Ticket=${entry.ticketNumber} (all ${allGameIdRecharges.length} recharges already bound)`);
-                }
                 continue;
-            }
-            
-            // DEBUG: Show available recharges for first few entries
-            if (matchCount < 3) {
-                console.log(`🔎 Entry GameID=${entry.gameId}, Available recharges: ${userRecharges.length}, Bound so far: ${boundOrderNumbers.size}`);
-                if (userRecharges.length > 0) {
-                    console.log(`   First available recharge: ${userRecharges[0].rechargeId.substring(0, 20)}... (R$${userRecharges[0].amount})`);
-                }
             }
             
             // Find OLDEST available recharge (FIFO: First In First Out)
@@ -619,8 +837,10 @@ window.UnifiedPage = (function() {
             let eligibilityRejects = 0;
             
             for (const recharge of userRecharges) {
-                // ⚠️ ENFORCE ELIGIBILITY WINDOW: Cannot use recharge for Day 3+ tickets!
-                if (!isTicketEligible(ticketTime, recharge.rechargeTime)) {
+                // ⚠️ CRITICAL: ENFORCE ELIGIBILITY WINDOW - Cannot use recharge for Day 3+ tickets!
+                const isEligible = isTicketEligible(ticketTime, recharge.rechargeTime);
+                
+                if (!isEligible) {
                     eligibilityRejects++;
                     continue;
                 }
@@ -634,10 +854,7 @@ window.UnifiedPage = (function() {
                 }
             }
             
-            // DEBUG: Show eligibility filtering
-            if (phase1Count < 5 && eligibilityRejects > 0) {
-                console.log(`⏰ Phase 1: Rejected ${eligibilityRejects} recharges outside eligibility window`);
-            }
+            // Skip debug logging for performance
             
             // BIND IT!
             if (oldestRecharge) {
@@ -666,21 +883,11 @@ window.UnifiedPage = (function() {
                 matchCount++;
                 phase1Count++;
                 
-                // DEBUG first 10 matches - SHOW OLDEST MATCHING with eligibility
-                if (matchCount <= 10) {
-                    const rechargeTimeStr = AdminCore.formatBrazilDateTime(oldestRecharge.rechargeTime, {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
-                    const ticketTimeStr = AdminCore.formatBrazilDateTime(entry.parsedDate, {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
-                    const window = calculateEligibilityWindow(oldestRecharge.rechargeTime);
-                    const windowEndStr = AdminCore.formatBrazilDateTime(window.endDate, {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
-                    console.log(`✅ Phase 1 Match ${phase1Count}: Recharge=${rechargeTimeStr} → Ticket=${ticketTimeStr} (Window ends: ${windowEndStr}) | Order=${orderToAdd.substring(0, 15)}... (R$${oldestRecharge.amount})`);
-                }
+                // Skip debug logging for performance
             }
         }
         
-        console.log(`✅ PHASE 1 COMPLETE: ${phase1Count} VALID tickets matched`);
-        
         // PHASE 2: Match PENDING entries with leftover recharges
-        console.log('🟡 PHASE 2: Matching PENDING entries...');
         for (const entry of sortedEntries) {
             const csvStatus = (entry.status || '').toUpperCase();
             if (csvStatus !== 'PENDING' && csvStatus !== 'PENDENTE') {
@@ -704,18 +911,25 @@ window.UnifiedPage = (function() {
                 continue;
             }
             
-            // Find OLDEST available recharge within eligibility window
+            // Find OLDEST available recharge (FIFO: First In First Out)
+            // Recharge MUST be BEFORE ticket time AND within 2-day eligibility window
             const ticketTime = entry.parsedDate;
             let oldestRecharge = null;
             let earliestTime = Infinity;
+            let eligibilityRejects = 0;
             
             for (const recharge of userRecharges) {
-                // ⚠️ ENFORCE ELIGIBILITY WINDOW
-                if (!isTicketEligible(ticketTime, recharge.rechargeTime)) {
+                // ⚠️ CRITICAL: ENFORCE ELIGIBILITY WINDOW - Cannot use recharge for Day 3+ tickets!
+                const isEligible = isTicketEligible(ticketTime, recharge.rechargeTime);
+                
+                if (!isEligible) {
+                    eligibilityRejects++;
                     continue;
                 }
                 
                 const rechargeTime = recharge.rechargeTime.getTime();
+                
+                // Find the OLDEST (earliest timestamp) eligible recharge
                 if (rechargeTime < earliestTime) {
                     earliestTime = rechargeTime;
                     oldestRecharge = recharge;
@@ -736,17 +950,10 @@ window.UnifiedPage = (function() {
                 });
                 matchCount++;
                 phase2Count++;
-                
-                if (phase2Count <= 5) {
-                    console.log(`✅ Phase 2 Match ${phase2Count}: PENDING → VALID | GameID=${entry.gameId} → Order=${orderToAdd.substring(0, 15)}... (R$${oldestRecharge.amount})`);
-                }
             }
         }
         
-        console.log(`✅ PHASE 2 COMPLETE: ${phase2Count} PENDING tickets upgraded to VALID`);
-        
         // PHASE 3: Match INVALID entries with leftover recharges
-        console.log('🔴 PHASE 3: Matching INVALID entries...');
         for (const entry of sortedEntries) {
             const csvStatus = (entry.status || '').toUpperCase();
             if (csvStatus !== 'INVALID' && csvStatus !== 'INVÁLIDO') {
@@ -770,23 +977,30 @@ window.UnifiedPage = (function() {
                 continue;
             }
             
-            // Find OLDEST available recharge within eligibility window
+            // Find OLDEST available recharge (FIFO: First In First Out)
+            // Recharge MUST be BEFORE ticket time AND within 2-day eligibility window
             const ticketTime = entry.parsedDate;
             let oldestRecharge = null;
             let earliestTime = Infinity;
+            let eligibilityRejects = 0;
             
             for (const recharge of userRecharges) {
-                // ⚠️ ENFORCE ELIGIBILITY WINDOW
+                // ⚠️ CRITICAL: ENFORCE ELIGIBILITY WINDOW - Cannot use recharge for Day 3+ tickets!
                 if (!isTicketEligible(ticketTime, recharge.rechargeTime)) {
+                    eligibilityRejects++;
                     continue;
                 }
                 
                 const rechargeTime = recharge.rechargeTime.getTime();
+                
+                // Find the OLDEST (earliest timestamp) eligible recharge
                 if (rechargeTime < earliestTime) {
                     earliestTime = rechargeTime;
                     oldestRecharge = recharge;
                 }
             }
+            
+            // Skip debug logging for performance
             
             if (oldestRecharge) {
                 const orderToAdd = oldestRecharge.rechargeId;
@@ -802,30 +1016,8 @@ window.UnifiedPage = (function() {
                 });
                 matchCount++;
                 phase3Count++;
-                
-                if (phase3Count <= 5) {
-                    console.log(`✅ Phase 3 Match ${phase3Count}: INVALID → VALID | GameID=${entry.gameId} → Order=${orderToAdd.substring(0, 15)}... (R$${oldestRecharge.amount})`);
-                }
             }
         }
-        
-        console.log(`✅ PHASE 3 COMPLETE: ${phase3Count} INVALID tickets upgraded to VALID`);
-        console.log(`✅ TOTAL MATCHED: ${matchCount} tickets (Phase1: ${phase1Count}, Phase2: ${phase2Count}, Phase3: ${phase3Count})`);
-        console.log(`📊 Bound order numbers: ${boundOrderNumbers.size}`);
-        console.log(`📋 Entry-Recharge map size: ${entryRechargeMap.size}`);
-        
-        // DETAILED DEBUG: Show first 10 unique order numbers
-        const orderArray = Array.from(boundOrderNumbers).slice(0, 10);
-        console.log(`🔍 First 10 bound orders:`, orderArray.map(o => o.substring(0, 20) + '...'));
-        
-        // DETAILED DEBUG: Show first 10 entry mappings
-        const mappingArray = Array.from(entryRechargeMap.entries()).slice(0, 10);
-        console.log(`🔍 First 10 entry mappings:`, mappingArray.map(([key, data]) => ({
-            key: key.substring(0, 30) + '...',
-            order: data.orderNumber.substring(0, 20) + '...',
-            gameId: data.gameId,
-            amount: data.amount
-        })));
     }
 
     function renderEntriesTable() {
@@ -840,8 +1032,6 @@ window.UnifiedPage = (function() {
         
         const start = (entriesPage - 1) * entriesPerPage;
         const pageEntries = filteredEntries.slice(start, start + entriesPerPage);
-        
-        console.log(`📊 Rendering ${pageEntries.length} entries (page ${entriesPage}, start ${start})`);
         
         if (pageEntries.length === 0) {
             tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No entries found</td></tr>';
@@ -891,57 +1081,122 @@ window.UnifiedPage = (function() {
                 status = 'VALID';
             }
             
-            // Status badge (after determining if upgraded)
-            let statusBadge = '';
-            switch (status) {
-                case 'VALID':
-                case 'VÁLIDO':
-                    statusBadge = '<span class="badge badge-success">✅ VALID</span>';
-                    break;
-                case 'INVALID':
-                case 'INVÁLIDO':
-                    statusBadge = '<span class="badge badge-danger">❌ INVALID</span>';
-                    break;
-                default:
-                    statusBadge = '<span class="badge badge-warning">⏳ PENDING</span>';
-            }
-            
-            // CUTOFF BADGE: Check if ticket was created AFTER 8 PM on recharge day
-            let cutoffBadge = '';
+            // CUTOFF CHECK: Determine if ticket participates in Day 2 draw
+            // Rules:
+            // 1. Ticket created AFTER 8 PM on Day 1 (recharge day) → CUTOFF (participates Day 2)
+            // 2. Ticket created on Day 2 (any time) → CUTOFF (participates Day 2)
+            // IMPORTANT:
+            // - rechargeTime: From "Record Time" in RECHARGE POPN1 - Sheet1 (7).csv (Column 5)
+            // - ticketTime: From "DATA/HORA REGISTRO" in OLD POP SORTE - SORTE (8).csv (Column 0)
+            // - CUTOFF badge means "participates in Day 2 draw" but ticket is still VALID!
+            let isCutoff = false;
             if (bruteForceMatch && entry.parsedDate) {
-                const rechargeTime = bruteForceMatch.recordTime;
-                const ticketTime = entry.parsedDate;
+                const rechargeTime = bruteForceMatch.recordTime; // Record Time from recharge CSV
+                const ticketTime = entry.parsedDate; // DATA/HORA REGISTRO from entries CSV
                 
-                // Check if ticket was created on SAME DAY as recharge
-                const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-                const ticketDateStr = AdminCore.formatBrazilDateTime(ticketTime, {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-                
-                if (rechargeDateStr === ticketDateStr) {
-                    // Same day - check if ticket was created after 8 PM
-                    const ticketHour = parseInt(AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'}));
+                // Get eligibility window to determine Day 1 and Day 2
+                const window = calculateEligibilityWindow(rechargeTime);
+                if (window) {
+                    // Compare dates directly (more efficient than string formatting)
+                    // Normalize dates to midnight for comparison
+                    const ticketDate = new Date(ticketTime);
+                    ticketDate.setUTCHours(0, 0, 0, 0);
                     
-                    if (ticketHour >= 20) {
-                        cutoffBadge = ' <span class="badge badge-secondary" style="font-size: 0.65rem;">⏰ CUTOFF</span>';
+                    const eligDay1Date = new Date(window.eligibilityDay1);
+                    eligDay1Date.setUTCHours(0, 0, 0, 0);
+                    
+                    const eligDay2Date = new Date(window.eligibilityDay2);
+                    eligDay2Date.setUTCHours(0, 0, 0, 0);
+                    
+                    const partDay1Date = new Date(window.day1);
+                    partDay1Date.setUTCHours(0, 0, 0, 0);
+                    
+                    const partDay2Date = new Date(window.day2);
+                    partDay2Date.setUTCHours(0, 0, 0, 0);
+                    
+                    // Check if ticket is on eligibility Day 1 or Day 2 (when tickets can be created)
+                    const isOnEligibilityDay1 = ticketDate.getTime() === eligDay1Date.getTime();
+                    const isOnEligibilityDay2 = ticketDate.getTime() === eligDay2Date.getTime();
+                    
+                    // Check if Day 2 participation exists and is different from Day 1 participation
+                    const hasDay2Participation = partDay1Date.getTime() !== partDay2Date.getTime();
+                    
+                    // DEBUG: Log cutoff calculation for troubleshooting
+                    const DEBUG_CUTOFF = false; // Set to true to enable
+                    if (DEBUG_CUTOFF && (entry.gameId === '3105451998' || entry.gameId === '3437192929' || entry.gameId === '3384889775')) {
+                        const rechargeDateStr = AdminCore.formatBrazilDateTime(rechargeTime, {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        const ticketTimeStr = AdminCore.formatBrazilDateTime(ticketTime, {
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        console.log(`🔍 CUTOFF DEBUG GameID=${entry.gameId}:`);
+                        console.log(`   Recharge: ${rechargeDateStr}`);
+                        console.log(`   Eligibility Days: Day1=${eligibilityDay1DateStr}, Day2=${eligibilityDay2DateStr}`);
+                        console.log(`   Participation Days: Day1=${participationDay1DateStr}, Day2=${participationDay2DateStr}`);
+                        console.log(`   Ticket: ${ticketTimeStr} (Date=${ticketDateStr})`);
+                        console.log(`   isOnEligibilityDay1=${isOnEligibilityDay1}, isOnEligibilityDay2=${isOnEligibilityDay2}`);
+                        console.log(`   hasDay2Participation=${hasDay2Participation}`);
+                        if (isOnEligibilityDay1) {
+                            const ticketHourStr = AdminCore.formatBrazilDateTime(ticketTime, {hour: '2-digit'});
+                            const ticketHour = parseInt(ticketHourStr, 10);
+                            console.log(`   Ticket hour: ${ticketHour} (>=20? ${ticketHour >= 20})`);
+                        }
+                    }
+                    
+                    if (isOnEligibilityDay1) {
+                        // Ticket created on eligibility Day 1
+                        // If Day 2 participation exists, check if ticket was created AFTER 8 PM
+                        if (hasDay2Participation) {
+                            // Get hour in Brazilian timezone
+                            // parseBrazilDateTime stores dates as UTC with BRT hour + 3
+                            // So BRT 20:36 → UTC 23:36
+                            // To get BRT from UTC: UTC - 3 (with wraparound)
+                            const utcHour = ticketTime.getUTCHours();
+                            const brtHour = (utcHour - 3 + 24) % 24; // Convert UTC to BRT (subtract 3, handle wraparound)
+                            
+                            if (brtHour >= 20) {
+                                isCutoff = true; // After 8 PM on eligibility Day 1 → CUTOFF (participates Day 2)
+                            }
+                        }
+                        // If no Day 2 participation (Day 2 = Day 1), no cutoff
+                    } else if (isOnEligibilityDay2) {
+                        // Ticket created on eligibility Day 2
+                        // CUTOFF if Day 2 participation exists and is different from Day 1
+                        if (hasDay2Participation) {
+                            isCutoff = true; // On eligibility Day 2 → CUTOFF (participates Day 2)
+                        }
+                        // If no Day 2 participation (Day 2 = Day 1), no cutoff
                     }
                 }
             }
             
-            // Combine status and cutoff badges
-            statusBadge = statusBadge + cutoffBadge;
+            // Status badge WITH CUTOFF badge integrated
+            let statusBadge = '';
+            const cutoffBadgeHtml = isCutoff ? ' <span class="badge badge-secondary" style="font-size: 0.65rem; margin-left: 4px;">⏰ CUTOFF</span>' : '';
             
-            // DEBUG first few entries
-            if (index < 5) {
-                const hasCutoff = cutoffBadge !== '';
-                console.log(`Entry ${index}: GameID=${entry.gameId}, CSVStatus=${entryCsvStatus}, FinalStatus=${status}, HasMatch=${!!bruteForceMatch}, WasUpgraded=${bruteForceMatch?.wasUpgraded}, HasCutoff=${hasCutoff}`);
+            switch (status) {
+                case 'VALID':
+                case 'VÁLIDO':
+                    statusBadge = `<span class="badge badge-success" data-cutoff="${isCutoff ? 'yes' : 'no'}">✅ VALID</span>${cutoffBadgeHtml}`;
+                    break;
+                case 'INVALID':
+                case 'INVÁLIDO':
+                    statusBadge = `<span class="badge badge-danger" data-cutoff="${isCutoff ? 'yes' : 'no'}">❌ INVALID</span>${cutoffBadgeHtml}`;
+                    break;
+                default:
+                    statusBadge = `<span class="badge badge-warning" data-cutoff="${isCutoff ? 'yes' : 'no'}">⏳ PENDING</span>${cutoffBadgeHtml}`;
             }
+            
+            // Skip debug logging for performance
             
             // SAFETY CHECK: Verify Game IDs match (should always be true)
             if (bruteForceMatch && bruteForceMatch.gameId !== entry.gameId) {
@@ -950,9 +1205,8 @@ window.UnifiedPage = (function() {
             
             // Show recharge info if has a match (whether originally valid or upgraded)
             if (bruteForceMatch) {
-                const orderNumShort = bruteForceMatch.orderNumber.length > 12 
-                    ? bruteForceMatch.orderNumber.substring(0, 12) + '...' 
-                    : bruteForceMatch.orderNumber;
+                // Show full order number (no truncation)
+                const orderNumber = bruteForceMatch.orderNumber;
                 
                 const timeStr = AdminCore.formatBrazilDateTime(bruteForceMatch.recordTime, {
                     day: '2-digit',
@@ -968,7 +1222,7 @@ window.UnifiedPage = (function() {
                 
                 rechargeInfo = `<div style="font-size: 0.7rem; line-height: 1.3;">
                     <strong class="text-success">R$ ${bruteForceMatch.amount.toFixed(2)}</strong><br>
-                    <span style="color: var(--text-tertiary);" title="${bruteForceMatch.orderNumber}">${orderNumShort}</span><br>
+                    <span style="color: var(--text-tertiary);">${orderNumber}</span><br>
                     <span style="color: var(--text-muted); font-size: 0.65rem;">${timeStr}</span>${upgradeBadge}
                 </div>`;
             }
@@ -980,7 +1234,7 @@ window.UnifiedPage = (function() {
             const formattedDrawDate = formatDrawDate(entry.drawDate);
             
             return `
-                <tr>
+                <tr data-cutoff="${isCutoff ? 'yes' : 'no'}">
                     <td>${statusBadge}</td>
                     <td style="font-size:0.8rem;white-space:nowrap">${formattedTime}</td>
                     <td><span class="platform-badge ${platform.toLowerCase()}">${platform}</span></td>
@@ -991,7 +1245,6 @@ window.UnifiedPage = (function() {
                     <td><span class="badge badge-info">${entry.contest}</span></td>
                     <td style="font-size:0.9rem">${entry.ticketNumber}</td>
                     <td>${rechargeInfo}</td>
-                    <td><button class="btn btn-sm btn-outline" onclick="UnifiedPage.showTicketDetails('${entry.ticketNumber}')">Details</button></td>
                 </tr>
             `;
             }).join('');
@@ -999,7 +1252,7 @@ window.UnifiedPage = (function() {
             console.log('✅ Table HTML generated successfully');
         } catch (error) {
             console.error('❌ ERROR rendering table:', error);
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger">Error loading entries. Check console for details.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger">Error loading entries. Check console for details.</td></tr>';
         }
     }
 
@@ -1016,10 +1269,36 @@ window.UnifiedPage = (function() {
         const pageNumbers = document.getElementById('pageNumbers');
         if (pageNumbers) {
             let html = '';
-            for (let i = 1; i <= Math.min(totalPages, 5); i++) {
+            
+            // Show first page
+            if (totalPages > 0) {
+                html += `<button class="pagination-btn ${1 === entriesPage ? 'active' : ''}" onclick="UnifiedPage.goToEntriesPage(1)">1</button>`;
+            }
+            
+            // Show pages around current page
+            const startPage = Math.max(2, entriesPage - 2);
+            const endPage = Math.min(totalPages - 1, entriesPage + 2);
+            
+            // Add ellipsis if needed before middle pages
+            if (startPage > 2) {
+                html += `<span class="text-muted">...</span>`;
+            }
+            
+            // Show middle pages
+            for (let i = startPage; i <= endPage; i++) {
                 html += `<button class="pagination-btn ${i === entriesPage ? 'active' : ''}" onclick="UnifiedPage.goToEntriesPage(${i})">${i}</button>`;
             }
-            if (totalPages > 5) html += `<span class="text-muted">... ${totalPages}</span>`;
+            
+            // Add ellipsis if needed after middle pages
+            if (endPage < totalPages - 1) {
+                html += `<span class="text-muted">...</span>`;
+            }
+            
+            // Show last page (if more than 1 page)
+            if (totalPages > 1) {
+                html += `<button class="pagination-btn ${totalPages === entriesPage ? 'active' : ''}" onclick="UnifiedPage.goToEntriesPage(${totalPages})">${totalPages}</button>`;
+            }
+            
             pageNumbers.innerHTML = html;
         }
     }
@@ -1531,14 +1810,16 @@ window.UnifiedPage = (function() {
         const debouncedEntriesFilter = AdminCore.debounce(applyEntriesFilters, 300);
         document.getElementById('filterGameId')?.addEventListener('input', (e) => { entriesFilters.gameId = e.target.value; debouncedEntriesFilter(); });
         document.getElementById('filterWhatsapp')?.addEventListener('input', (e) => { entriesFilters.whatsapp = e.target.value; debouncedEntriesFilter(); });
+        document.getElementById('filterOrderNumber')?.addEventListener('input', (e) => { entriesFilters.orderNumber = e.target.value; debouncedEntriesFilter(); });
         document.getElementById('filterContest')?.addEventListener('change', (e) => { entriesFilters.contest = e.target.value; applyEntriesFilters(); });
         document.getElementById('filterValidity')?.addEventListener('change', (e) => { entriesFilters.validity = e.target.value; applyEntriesFilters(); });
         document.getElementById('sortBy')?.addEventListener('change', (e) => { sortBy = e.target.value; applyEntriesFilters(); });
         document.getElementById('btnClearFilters')?.addEventListener('click', () => {
-            entriesFilters = { gameId: '', whatsapp: '', contest: '', validity: 'all' };
+            entriesFilters = { gameId: '', whatsapp: '', contest: '', validity: 'all', orderNumber: '' };
             sortBy = 'date-desc';
             document.getElementById('filterGameId').value = '';
             document.getElementById('filterWhatsapp').value = '';
+            document.getElementById('filterOrderNumber').value = '';
             document.getElementById('filterContest').value = '';
             document.getElementById('filterValidity').value = 'all';
             document.getElementById('sortBy').value = 'date-desc';
